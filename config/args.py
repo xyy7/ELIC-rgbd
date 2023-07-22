@@ -3,22 +3,18 @@ import argparse
 
 def train_options():
     parser = argparse.ArgumentParser(description="Training script.")
-    parser.add_argument(
-        "-exp",
-        "--experiment",
-        default="0483mse",
-        type=str,
-        required=False,
-        help="Experiment name"
-    )
-    parser.add_argument(
-        "-d",
-        "--dataset",
-        default="/home/npr/dataset/",
-        type=str,
-        required=False,
-        help="Training dataset"
-    )
+    parser.add_argument("-exp",
+                        "--experiment",
+                        default="0483mse",
+                        type=str,
+                        required=False,
+                        help="Experiment name")
+    parser.add_argument("-d",
+                        "--dataset",
+                        default="/home/npr/dataset/",
+                        type=str,
+                        required=False,
+                        help="Training dataset")
     parser.add_argument(
         "-e",
         "--epochs",
@@ -53,12 +49,10 @@ def train_options():
         default="mse",
         help="Optimized for (default: %(default)s)",
     )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=8,
-        help="Batch size (default: %(default)s)"
-    )
+    parser.add_argument("--batch-size",
+                        type=int,
+                        default=8,
+                        help="Batch size (default: %(default)s)")
     parser.add_argument(
         "--test-batch-size",
         type=int,
@@ -77,69 +71,52 @@ def train_options():
         default=(256, 256),
         help="Size of the patches to be cropped (default: %(default)s)",
     )
-    parser.add_argument(
-        "--gpu_id",
-        type=int,
-        default=0,
-        help="GPU ID"
-    )
-    parser.add_argument(
-        "--cuda",
-        default=True,
-        help="Use cuda"
-    )
-    parser.add_argument(
-        "--save",
-        default=True,
-        help="Save model to disk"
-    )
-    parser.add_argument(
-        "--seed",
-        type=float,
-        default=192.1,
-        help="Set random seed for reproducibility"
-    )
+    parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID")
+    parser.add_argument("--cuda", default=True, help="Use cuda")
+    parser.add_argument("--save", default=True, help="Save model to disk")
+    parser.add_argument("--seed",
+                        type=float,
+                        default=192.1,
+                        help="Set random seed for reproducibility")
     parser.add_argument(
         "--clip_max_norm",
         default=1.0,
         type=float,
         help="gradient clipping max norm (default: %(default)s",
     )
-    parser.add_argument(
-        "-c",
-        "--checkpoint",
-        default=None,
-        type=str,
-        help="pretrained model path"
-    )
+    parser.add_argument("-c",
+                        "--checkpoint",
+                        default=None,
+                        type=str,
+                        help="pretrained model path")
     args = parser.parse_args()
     return args
 
 
 def test_options():
     parser = argparse.ArgumentParser(description="Testing script.")
+    parser.add_argument("-exp",
+                        "--experiment",
+                        default="",
+                        type=str,
+                        required=False,
+                        help="Experiment name")
+    parser.add_argument("--split",
+                        default="depth",
+                        type=str,
+                        required=False,
+                        help="depth / rgb")
+    parser.add_argument("-d",
+                        "--dataset",
+                        default="/data/chenminghui/nyud/nyu5k/nyuv2/test",
+                        type=str,
+                        required=False,
+                        help="Training dataset")
     parser.add_argument(
-        "-exp",
-        "--experiment",
-        default="elic_test",
-        type=str,
-        required=False,
-        help="Experiment name"
-    )
-    parser.add_argument(
-        "--codestream_path",
-        default="experiments/elic_0800/codestream/100",
-        type=str,
-        required=False,
-        help="Path to the codestream"
-    )
-    parser.add_argument(
-        "-d",
-        "--dataset",
-        default="/home/npr/dataset/",
-        type=str,
-        required=False,
-        help="Training dataset"
+        "-m",
+        "--model",
+        default="ELIC",
+        help="Model architecture (default: %(default)s)",
     )
     parser.add_argument(
         "-n",
@@ -157,31 +134,21 @@ def test_options():
     parser.add_argument(
         "--test-batch-size",
         type=int,
-        default=1,
+        default=1,  # 需要保存图片，计算时间等操作
         help="Test batch size (default: %(default)s)",
     )
+    parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID")
     parser.add_argument(
-        "--gpu_id",
-        type=int,
-        default=0,
-        help="GPU ID"
-    )
-    parser.add_argument(
-        "--cuda",
-        default=True,
-        help="Use cuda"
-    )
-    parser.add_argument(
-        "--save",
-        default=True,
-        help="Save model to disk"
-    )
-    parser.add_argument(
-        "-c",
-        "--checkpoint",
-        default=None,
+        "-q",
+        "--quality",
         type=str,
-        help="pretrained model path"
+        default='1',
+        help="Quality (default: %(default)s)",
     )
+    parser.add_argument("-c",
+                        "--checkpoint",
+                        default=None,
+                        type=str,
+                        help="pretrained model path")
     args = parser.parse_args()
     return args

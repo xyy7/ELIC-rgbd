@@ -29,15 +29,20 @@ def main():
 
     args = test_options()
     config = model_config()
+    args.dataset = "/data/chenminghui/sunrgbd/test"  # 修改[因为已经修改成符合nyuv2的读取方式了,所以不需要改]
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.channel = 3 if args.split == "rgb" else 1
     if args.experiment == "":
-        args.experiment = f"nyuv2_{args.split}_{args.model}_{args.quality}"
+        args.experiment = f"sunrgbd_{args.split}_{args.model}_{args.quality}"
         print("exp name:", args.experiment)
 
-    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    if os.path.exists(ckt_path):
+    # 自动装载
+    ckt_path1 = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
+    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_latest.pth.tar")
+    if os.path.exists(ckt_path) and not args.checkpoint:
         args.checkpoint = ckt_path
+    elif os.path.exists(ckt_path1) and not args.checkpoint:
+        args.checkpoint = ckt_path1
 
     # logger增加epoch名称
     checkpoint = torch.load(args.checkpoint)
@@ -66,7 +71,7 @@ def main():
     test_model(net=net, test_dataloader=test_dataloader, logger_test=logger_test, save_dir=save_dir, epoch=epoch, mode=padding_mode)
 
 
-def set_free_cpu(rate=0.1, need_cpu=15):
+def set_free_cpu(rate=0.1, need_cpu=30):
     import os
 
     import psutil
@@ -81,5 +86,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    set_free_cpu()
+    # set_free_cpu()
     main()

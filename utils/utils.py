@@ -1,22 +1,24 @@
-import PIL.Image as Image
+import json
 import shutil
+import struct
+from pathlib import Path
+
+import PIL.Image as Image
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import struct
-from pathlib import Path
 from torchvision.transforms import ToPILImage
-import json
-
 
 """ configuration json """
+
+
 class Config(dict):
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
 
     @classmethod
     def load(cls, file):
-        with open(file, 'r') as f:
+        with open(file, "r") as f:
             config = json.loads(f.read())
             return Config(config)
 
@@ -45,6 +47,7 @@ def write_bytes(fd, values, fmt=">{:d}s"):
     if len(values) == 0:
         return
     fd.write(struct.pack(fmt.format(len(values)), values))
+    # print(len(values))
     return len(values) * 1
 
 
@@ -102,5 +105,5 @@ class AverageMeter:
 def save_checkpoint(state, is_best, filename="checkpoint.pth.tar"):
     torch.save(state, filename)
     if is_best:
-        best_filename = filename.replace(filename.split('/')[-1], "checkpoint_best_loss.pth.tar")
+        best_filename = filename.replace(filename.split("/")[-1], "checkpoint_best_loss.pth.tar")
         shutil.copyfile(filename, best_filename)

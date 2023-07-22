@@ -23,6 +23,7 @@ def ckbd_split(y):
     nonanchor = ckbd_nonanchor(y)
     return anchor, nonanchor
 
+
 def ckbd_merge(anchor, nonanchor):
     # out = torch.zeros_like(anchor).to(anchor.device)
     # out[:, :, 0::2, 0::2] = non_anchor[:, :, 0::2, 0::2]
@@ -32,11 +33,13 @@ def ckbd_merge(anchor, nonanchor):
 
     return anchor + nonanchor
 
+
 def ckbd_anchor(y):
     anchor = torch.zeros_like(y).to(y.device)
-    anchor[:, :, 0::2, 1::2] = y[:, :, 0::2, 1::2]
+    anchor[:, :, 0::2, 1::2] = y[:, :, 0::2, 1::2]  # 第4个维度：奇数，每次间隔一个；第4个维度：偶数，每次间隔一个
     anchor[:, :, 1::2, 0::2] = y[:, :, 1::2, 0::2]
     return anchor
+
 
 def ckbd_nonanchor(y):
     nonanchor = torch.zeros_like(y).to(y.device)
@@ -44,19 +47,22 @@ def ckbd_nonanchor(y):
     nonanchor[:, :, 1::2, 1::2] = y[:, :, 1::2, 1::2]
     return nonanchor
 
+
 def ckbd_anchor_sequeeze(y):
     B, C, H, W = y.shape
     anchor = torch.zeros([B, C, H, W // 2]).to(y.device)
-    anchor[:, :, 0::2, :] = y[:, :, 0::2, 1::2]
+    anchor[:, :, 0::2, :] = y[:, :, 0::2, 1::2]  # 直接把偶数的压缩掉
     anchor[:, :, 1::2, :] = y[:, :, 1::2, 0::2]
     return anchor
+
 
 def ckbd_nonanchor_sequeeze(y):
     B, C, H, W = y.shape
     nonanchor = torch.zeros([B, C, H, W // 2]).to(y.device)
-    nonanchor[:, :, 0::2, :] = y[:, :, 0::2, 0::2]
+    nonanchor[:, :, 0::2, :] = y[:, :, 0::2, 0::2]  # 直接把奇数的压缩掉
     nonanchor[:, :, 1::2, :] = y[:, :, 1::2, 1::2]
     return nonanchor
+
 
 def ckbd_anchor_unsequeeze(anchor):
     B, C, H, W = anchor.shape
@@ -64,6 +70,7 @@ def ckbd_anchor_unsequeeze(anchor):
     y_anchor[:, :, 0::2, 1::2] = anchor[:, :, 0::2, :]
     y_anchor[:, :, 1::2, 0::2] = anchor[:, :, 1::2, :]
     return y_anchor
+
 
 def ckbd_nonanchor_unsequeeze(nonanchor):
     B, C, H, W = nonanchor.shape
@@ -73,7 +80,7 @@ def ckbd_nonanchor_unsequeeze(nonanchor):
     return y_nonanchor
 
 
-def compress_anchor(gaussian_conditional:EntropyModel, anchor, scales_anchor, means_anchor, symbols_list, indexes_list):
+def compress_anchor(gaussian_conditional: EntropyModel, anchor, scales_anchor, means_anchor, symbols_list, indexes_list):
     # squeeze anchor to avoid non-anchor symbols
     anchor_squeeze = ckbd_anchor_sequeeze(anchor)
     scales_anchor_squeeze = ckbd_anchor_sequeeze(scales_anchor)
@@ -85,7 +92,8 @@ def compress_anchor(gaussian_conditional:EntropyModel, anchor, scales_anchor, me
     anchor_hat = ckbd_anchor_unsequeeze(anchor_hat + means_anchor_squeeze)
     return anchor_hat
 
-def compress_nonanchor(gaussian_conditional:EntropyModel, nonanchor, scales_nonanchor, means_nonanchor, symbols_list, indexes_list):
+
+def compress_nonanchor(gaussian_conditional: EntropyModel, nonanchor, scales_nonanchor, means_nonanchor, symbols_list, indexes_list):
     nonanchor_squeeze = ckbd_nonanchor_sequeeze(nonanchor)
     scales_nonanchor_squeeze = ckbd_nonanchor_sequeeze(scales_nonanchor)
     means_nonanchor_squeeze = ckbd_nonanchor_sequeeze(means_nonanchor)
@@ -96,7 +104,8 @@ def compress_nonanchor(gaussian_conditional:EntropyModel, nonanchor, scales_nona
     nonanchor_hat = ckbd_nonanchor_unsequeeze(nonanchor_hat + means_nonanchor_squeeze)
     return nonanchor_hat
 
-def decompress_anchor(gaussian_conditional:EntropyModel, scales_anchor, means_anchor, decoder, cdf, cdf_lengths, offsets):
+
+def decompress_anchor(gaussian_conditional: EntropyModel, scales_anchor, means_anchor, decoder, cdf, cdf_lengths, offsets):
     scales_anchor_squeeze = ckbd_anchor_sequeeze(scales_anchor)
     means_anchor_squeeze = ckbd_anchor_sequeeze(means_anchor)
     indexes = gaussian_conditional.build_indexes(scales_anchor_squeeze)
@@ -105,7 +114,8 @@ def decompress_anchor(gaussian_conditional:EntropyModel, scales_anchor, means_an
     anchor_hat = ckbd_anchor_unsequeeze(anchor_hat)
     return anchor_hat
 
-def decompress_nonanchor(gaussian_conditional:EntropyModel, scales_nonanchor, means_nonanchor, decoder, cdf, cdf_lengths, offsets):
+
+def decompress_nonanchor(gaussian_conditional: EntropyModel, scales_nonanchor, means_nonanchor, decoder, cdf, cdf_lengths, offsets):
     scales_nonanchor_squeeze = ckbd_nonanchor_sequeeze(scales_nonanchor)
     means_nonanchor_squeeze = ckbd_nonanchor_sequeeze(means_nonanchor)
     indexes = gaussian_conditional.build_indexes(scales_nonanchor_squeeze)

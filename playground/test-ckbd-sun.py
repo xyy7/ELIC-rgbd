@@ -12,6 +12,7 @@ import faulthandler
 from config.args import test_options
 from config.config import model_config
 from models import ELIC
+from models.Cheng2020withCKBD import Cheng2020AnchorwithCheckerboard
 from PIL import Image, ImageFile
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -29,17 +30,22 @@ def main():
 
     args = test_options()
     config = model_config()
+    args.dataset = "/data/chenminghui/sunrgbd/test"  # 修改[因为已经修改成符合nyuv2的读取方式了,所以不需要改]
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
+    args.model = 'ckbd'
     args.channel = 3 if args.split == "rgb" else 1
     if args.experiment == "":
-        args.experiment = f"nyuv2_{args.split}_{args.model}_{args.quality}"
+        args.experiment = f"sunrgbd_{args.split}_{args.model}_{args.quality}"
         print("exp name:", args.experiment)
 
-    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    if os.path.exists(ckt_path):
+    # 自动装载
+    ckt_path1 = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
+    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_latest.pth.tar")
+    if os.path.exists(ckt_path) and not args.checkpoint:
         args.checkpoint = ckt_path
-
-    # logger增加epoch名称
+    elif os.path.exists(ckt_path1) and not args.checkpoint:
+        args.checkpoint = ckt_path1
+    print("ckpt",args.checkpoint)
     checkpoint = torch.load(args.checkpoint)
     if args.checkpoint != None:
         epoch = checkpoint["epoch"]
@@ -55,7 +61,9 @@ def main():
     test_dataset = ImageFolder(args.dataset, split=args.split, transform=test_transforms)
     test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False)
 
-    net = ELIC(config=config, ch=args.channel)
+    # net = ELIC(config=config, ch=args.channel)
+    net = Cheng2020AnchorwithCheckerboard(channel=args.channel)
+
     net = net.to(device)
     net.load_state_dict(checkpoint["state_dict"])
     net.update(force=True)
@@ -81,5 +89,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    set_free_cpu()
+    # set_free_cpu()
     main()
