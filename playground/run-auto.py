@@ -96,9 +96,9 @@ def every_x_minutes_test(x=5, sh_file="test_nyuv2.sh"):
     while True:
         # 处理
         free_gpus = get_free_gpu(0.9)
-        if len(free_gpus) >= 1:
-            gpustr = f"--gpu_id {free_gpus[0]}"
-            cmd = re.sub(r"--gpu_id \d", gpustr, cmds[cmd_num])
+        if len(free_gpus) >= 2:
+            gpustr = f"--gpu_id {free_gpus[0]},{free_gpus[1]}"
+            cmd = re.sub(r"--gpu_id \d,\d", gpustr, cmds[cmd_num])
             # cmd = re.sub(r"--master_port \d*", "--master_port " + str(random.randint(6006, 8008)), cmd)
             print(cmd)
             os.system(cmd)
@@ -127,4 +127,4 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 if __name__ == "__main__":
     # every_x_minutes(10)
     # every_x_minutes_test(x=10, sh_file="train_nyuv2.sh")
-    every_x_minutes_test(x=10, sh_file="train_sunrgbd.sh")
+    every_x_minutes_test(x=10, sh_file="train_nyuv2_united.sh")

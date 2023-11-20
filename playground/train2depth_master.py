@@ -214,6 +214,7 @@ def train_one_epoch(model, model_single, criterion, train_dataloader, optimizer,
                     f'Bpp loss: {out_criterion["bpp_loss"].item():.2f} | '
                     f"Aux loss: {aux_loss.item():.2f}"
                 )
+        break
 
     return current_step
 
@@ -401,7 +402,7 @@ def main(argv):
     test_dataset = nyuv2(val_dir, False)
     device = "cuda"
 
-    train_dataloader = DataLoader(train_dataset, batch_size=4, num_workers=2, shuffle=True, pin_memory=(device == "cuda"), drop_last=True)
+    train_dataloader = DataLoader(train_dataset, batch_size=1, num_workers=2, shuffle=True, pin_memory=(device == "cuda"), drop_last=True)
 
     test_dataloader = DataLoader(test_dataset, batch_size=1, num_workers=1, pin_memory=(device == "cuda"))
 

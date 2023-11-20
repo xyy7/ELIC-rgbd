@@ -1,16 +1,15 @@
 # From CompresssAI
 # Modified by Wei Jiang
 
+import math
+
+import einops
 import torch
 import torch.nn as nn
-import math
-import einops
 
 
-def get_scale_table(
-    min=0.11, max=256, levels=64
-):  # pylint: disable=W0622
-    return torch.exp(torch.linspace(math.log(min), math.log(max), levels)) # 为什么要先ln再求e次方，是为了更高的精度吗？
+def get_scale_table(min=0.11, max=256, levels=64):  # pylint: disable=W0622
+    return torch.exp(torch.linspace(math.log(min), math.log(max), levels))  # 为什么要先ln再求e次方，是为了更高的精度吗？
 
 
 def find_named_module(module, query):
@@ -40,14 +39,7 @@ def find_named_buffer(module, query):
     return next((b for n, b in module.named_buffers() if n == query), None)
 
 
-def _update_registered_buffer(
-    module,
-    buffer_name,
-    state_dict_key,
-    state_dict,
-    policy="resize_if_empty",
-    dtype=torch.int,
-):
+def _update_registered_buffer(module, buffer_name, state_dict_key, state_dict, policy="resize_if_empty", dtype=torch.int):
     new_size = state_dict[state_dict_key].size()
     registered_buf = find_named_buffer(module, buffer_name)
 
@@ -68,14 +60,7 @@ def _update_registered_buffer(
         raise ValueError(f'Invalid policy "{policy}"')
 
 
-def update_registered_buffers(
-    module,
-    module_name,
-    buffer_names,
-    state_dict,
-    policy="resize_if_empty",
-    dtype=torch.int,
-):
+def update_registered_buffers(module, module_name, buffer_names, state_dict, policy="resize_if_empty", dtype=torch.int):
     """Update the registered buffers in a module according to the tensors sized
     in a state_dict.
 
@@ -96,11 +81,12 @@ def update_registered_buffers(
             raise ValueError(f'Invalid buffer name "{buffer_name}"')
 
     for buffer_name in buffer_names:
-        _update_registered_buffer(
-            module,
-            buffer_name,
-            f"{module_name}.{buffer_name}",
-            state_dict,
-            policy,
-            dtype,
-        )
+        _update_registered_buffer(module, buffer_name, f"{module_name}.{buffer_name}", state_dict, policy, dtype)
+
+
+def conv(in_channels, out_channels, kernel_size=5, stride=2):
+    return nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2)
+
+
+def deconv(in_channels, out_channels, kernel_size=5, stride=2):  # SN -1 + k - 2p
+    return nn.ConvTranspose2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, output_padding=stride - 1, padding=kernel_size // 2)

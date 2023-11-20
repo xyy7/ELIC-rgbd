@@ -38,8 +38,8 @@ def main():
         print("exp name:", args.experiment)
 
     # 自动装载
-    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    ckt_path1 = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_latest.pth.tar")
+    ckt_path1 = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
+    ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_latest.pth.tar")
     if os.path.exists(ckt_path):
         args.checkpoint = ckt_path
     elif os.path.exists(ckt_path1):
@@ -107,5 +107,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    set_free_cpu()
+    # set_free_cpu()
     main()

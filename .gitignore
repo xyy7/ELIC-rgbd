@@ -1,6 +1,6 @@
 *.bin
 *.inc
-*.sh
+# *.sh
 *.tar.gz
 .DS_Store
 *.png
@@ -53,7 +53,7 @@ share/python-wheels/
 MANIFEST
 Thermal*
 RGB*
-test*
+# test*
 Cross*
 wandb
 data

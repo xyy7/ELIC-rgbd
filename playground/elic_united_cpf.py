@@ -23,7 +23,8 @@ class ELIC_united_cpf(CompressionModel):
         self.quant = config.quant  # noise or ste
         self.slice_num = slice_num
         self.slice_ch = slice_ch
-        self.g_a = AnalysisTransformEXcross(N, M, act=nn.ReLU)
+        self.g_a = AnalysisTransformEXcro(N, M, act=nn.ReLU)
+        # self.g_a = AnalysisTransformEXcross(N, M, act=nn.ReLU)
         self.g_s = SynthesisTransformEXcross(N, M, act=nn.ReLU)
         # Hyper Transform
         self.h_a = HyperAnalysisEXcro(N, M, act=nn.ReLU)

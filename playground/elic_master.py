@@ -288,7 +288,12 @@ class ELIC_master(CompressionModel):
 
         return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}}
 
-    def compress(self, x):
+    def compress(self, x, aux=None, aux_out=None):
+        aux_f = self.aux_encoder(aux)
+        fv = self.master_encoder(x)
+        fv_bar, beta, gamma = self.channel_aligner(fv, aux_f)
+        x = torch.cat([fv, fv_bar], dim=1)
+
         y = self.g_a(x)
         z = self.h_a(y)
 
@@ -346,12 +351,15 @@ class ELIC_master(CompressionModel):
         y_strings.append(y_string)
 
         torch.backends.cudnn.deterministic = False
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
+        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:], "beta": beta, "gamma": gamma}
 
-    def decompress(self, strings, shape):
+    def decompress(self, strings, shape, beta, gamma, aux, aux_out):
         torch.backends.cudnn.deterministic = True
         torch.cuda.synchronize()
         start_time = time.process_time()
+
+        aux_f = self.aux_encoder(aux)
+        fv_bar = gamma * aux_f + beta
 
         y_strings = strings[0][0]
         z_strings = strings[1]
@@ -401,7 +409,12 @@ class ELIC_master(CompressionModel):
 
         y_hat = torch.cat(y_hat_slices, dim=1)
         torch.backends.cudnn.deterministic = False
-        x_hat = self.g_s(y_hat)
+        up1 = aux_out["up1"]
+        up2 = aux_out["up2"]
+        up3 = aux_out["up3"]
+        x_hat = self.g_s(y_hat, up1, up2, up3)
+        x_hat = torch.cat([fv_bar, x_hat], dim=1)
+        x_hat = self.master_decoder(x_hat)
 
         torch.cuda.synchronize()
         end_time = time.process_time()

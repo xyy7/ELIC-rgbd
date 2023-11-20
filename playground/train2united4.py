@@ -52,6 +52,7 @@ from torchvision.transforms import ToPILImage
 from utils import util
 
 from elic_united4 import ELIC_united
+
 # from models.elic import ELIC
 from elic_united_cpf import ELIC_united_cpf
 from elic_united_EEM1 import ELIC_united_EEM
@@ -143,13 +144,17 @@ class RateDistortionLoss(nn.Module):
             self.depth_lmbda = (lmbdas[math.ceil(depth_q)] + lmbdas[math.floor(depth_q)]) / 2
 
         self.l1_criterion = nn.L1Loss()
+        self.iter = 0
 
     def get_final_loss(self, out):
         # out['loss'] = (out['ssim_loss'] + out['edge_loss'] + 0.1 * out['l1_loss']) * self.lmbda + out["bpp_loss"]
         # out["d_mse_loss"] = self.mse(d, depth)
-
-        # out["loss"] = self.lmbda * 255 ** 2 * (out["r_mse_loss"]+out["d_mse_loss"]) + out["r_bpp_loss"] + out["d_bpp_loss"]
-        out["loss"] = self.rgb_lmbda * 255**2 * out["r_mse_loss"] + out["r_bpp_loss"] + self.depth_lmbda * 255**2 * 0.01 * out["d_loss"] + out["d_bpp_loss"]
+        if True:  # 先用mse训练一个epoch进行预热训练
+            # if False:  # 先用mse训练一个epoch进行预热训练
+            out["loss"] = self.rgb_lmbda * 255**2 * out["r_mse_loss"] + out["r_bpp_loss"] + self.depth_lmbda * 255**2 * 0.01 * out["d_loss"] + out["d_bpp_loss"]
+        else:
+            out["loss"] = self.rgb_lmbda * 255**2 * out["r_mse_loss"] + out["r_bpp_loss"] + self.depth_lmbda * 255**2 * out["d_mse_loss"] + out["d_bpp_loss"]
+        self.iter += 1
         return out
 
     def forward(self, output, rgb, depth):
@@ -164,7 +169,6 @@ class RateDistortionLoss(nn.Module):
         # rgb loss
         r = output["x_hat"]["r"]
         out["r_mse_loss"] = self.mse(r, rgb)
-
         # depth loss
         d = output["x_hat"]["d"]
         out["d_mse_loss"] = self.mse(d, depth)  # mse可能会导致图像平滑，不适用
@@ -177,7 +181,11 @@ class RateDistortionLoss(nn.Module):
         out["edge_loss"] = torch.mean(grad_diff_x + grad_diff_y)
 
         out["ssim_loss"] = torch.clamp((1 - ssim(d, depth, val_range=1)) * 0.5, 0, 1)
+
         out["d_loss"] = out["ssim_loss"] + out["edge_loss"] + 0.1 * out["l1_loss"]
+        # # print(f'{r.shape[0]} ssim:{out["ssim_loss"]} edge_loss：{out["edge_loss"]} l1_loss:{out["l1_loss"]} ')
+
+        # out["d_loss"] = out["d_mse_loss"]
 
         return self.get_final_loss(out)
 
@@ -379,6 +387,7 @@ def parse_args(argv):
     parser.add_argument("--gpu_id", type=str, default="0", help="GPU ID")
 
     parser.add_argument("-e", "--epochs", default=400, type=int, help="Number of epochs (default: %(default)s)")
+    parser.add_argument("-se", "--start_epoch", default=360, type=int, help="Number of epochs (default: %(default)s)")
     parser.add_argument("-lr", "--learning-rate", default=1e-4, type=float, help="Learning rate (default: %(default)s)")
     parser.add_argument("-q", "--quality", type=str, default="3_3", help="Quality")
     # parser.add_argument(
@@ -502,6 +511,11 @@ def main(argv):
 
     logger_train.info(args)
     logger_train.info(net)
+    total_params = sum(p.numel() for p in net.parameters())
+    print("params:", total_params)
+    print(f"params:{total_params/1000000:.2f} M")
+
+    logger_train.info(f"params:{total_params/1000000:.2f} M")
 
     # if torch.cuda.device_count() > 1:
     #     net = CustomDataParallel(net)
@@ -516,10 +530,14 @@ def main(argv):
         # aux_optimizer.load_state_dict(checkpoint['aux_optimizer'])
         # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
         lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.1)
-        lr_scheduler._step_count = checkpoint["lr_scheduler"]["_step_count"]
-        lr_scheduler.last_epoch = checkpoint["lr_scheduler"]["last_epoch"]
-        # print(lr_scheduler.state_dict())
-        start_epoch = checkpoint["epoch"]
+        if not args.start_epoch:
+            start_epoch = checkpoint["epoch"]
+            lr_scheduler._step_count = checkpoint["lr_scheduler"]["_step_count"]
+            lr_scheduler.last_epoch = checkpoint["lr_scheduler"]["last_epoch"]
+        else:
+            start_epoch = args.start_epoch
+            lr_scheduler._step_count = args.start_epoch
+            lr_scheduler.last_epoch = args.start_epoch
         if args.checkpoint.find("best") != -1:
             best_loss = checkpoint["loss"]
         else:

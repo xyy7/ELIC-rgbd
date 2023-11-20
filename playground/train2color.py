@@ -309,6 +309,7 @@ def parse_args(argv):
     parser.add_argument("--gpu_id", type=int, default=0, help="GPU ID")
 
     parser.add_argument("-e", "--epochs", default=400, type=int, help="Number of epochs (default: %(default)s)")
+    parser.add_argument("-se", "--start_epoch", default=340, type=int, help="Number of epochs (default: %(default)s)")
     parser.add_argument("-lr", "--learning-rate", default=1e-4, type=float, help="Learning rate (default: %(default)s)")
     parser.add_argument("-q", "--quality", type=int, default=1, help="Quality (default: %(default)s)")
     # parser.add_argument(
@@ -430,10 +431,15 @@ def main(argv):
         # aux_optimizer.load_state_dict(checkpoint['aux_optimizer'])
         # lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
         lr_scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=args.milestones, gamma=0.1)
-        lr_scheduler._step_count = checkpoint["lr_scheduler"]["_step_count"]
-        lr_scheduler.last_epoch = checkpoint["lr_scheduler"]["last_epoch"]
         # print(lr_scheduler.state_dict())
-        start_epoch = checkpoint["epoch"]
+        if not args.start_epoch:
+            start_epoch = checkpoint["epoch"]
+            lr_scheduler._step_count = checkpoint["lr_scheduler"]["_step_count"]
+            lr_scheduler.last_epoch = checkpoint["lr_scheduler"]["last_epoch"]
+        else:
+            start_epoch = args.start_epoch
+            lr_scheduler._step_count = args.start_epoch
+            lr_scheduler.last_epoch = args.start_epoch
         best_loss = checkpoint["loss"]
         current_step = start_epoch * math.ceil(len(train_dataloader.dataset) / args.batch_size)
         checkpoint = None

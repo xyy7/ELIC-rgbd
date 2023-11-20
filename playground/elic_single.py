@@ -207,7 +207,7 @@ class ELIC_single(CompressionModel):
         torch.cuda.synchronize()
         start_time = time.process_time()
 
-        y_strings = strings[0][0]
+        y_strings = strings[0][0]  # 不论是不是batch都写在了一起
         z_strings = strings[1]
         z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
         hyper_params = self.h_s(z_hat)

@@ -11,13 +11,15 @@ import faulthandler
 
 from config.args import test_options
 from config.config import model_config
-from models import ELIC
 from PIL import Image, ImageFile
 from torch.utils.data import DataLoader
 from torchvision import transforms
-from utils.dataset import ImageFolder
+from utils.dataset import ImageFolder, ImageFolderUnited
 from utils.logger import setup_logger
-from utils.testing import test_model
+from utils.testing import test_model, test_master
+
+from elic_master import ELIC_master
+from elic_single import ELIC_single
 
 faulthandler.enable()
 
@@ -36,7 +38,7 @@ def main():
         print("exp name:", args.experiment)
 
     ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    if os.path.exists(ckt_path) and not args.checkpoint:
+    if os.path.exists(ckt_path):
         args.checkpoint = ckt_path
 
     # logger增加epoch名称
@@ -52,18 +54,28 @@ def main():
     logger_test = logging.getLogger("test")
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
-    test_dataset = ImageFolder(args.dataset, split=args.split, transform=test_transforms)
+    test_dataset = ImageFolderUnited(args.dataset, transform=test_transforms)
     test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False)
 
-    net = ELIC(config=config, ch=args.channel)
+    net = ELIC_master(config=config, ch=1)
+    net_single = ELIC_single(config=config, ch=3)
+    if args.checkpoint != None:
+        checkpoint = torch.load(args.checkpoint)
+        net.load_state_dict(checkpoint["state_dict"])
+        net.update(force=True)
+    net_single_ckt = torch.load(args.checkpoint1)
+    net_single.load_state_dict(net_single_ckt["state_dict"])
+    net_single.update(force=True)
+    net_single.eval()
+    net.eval()
     net = net.to(device)
-    net.load_state_dict(checkpoint["state_dict"])
-    net.update(force=True)
+    net_single = net_single.to(device)
+
     logger_test.info(f"Start testing!")
     save_dir = os.path.join("../experiments", args.experiment, "codestream", "%02d" % (epoch + 1))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    test_model(net=net, test_dataloader=test_dataloader, logger_test=logger_test, save_dir=save_dir, epoch=epoch, mode=padding_mode)
+    test_master(net=net, net_single=net_single, test_dataloader=test_dataloader, logger_test=logger_test, save_dir=save_dir, epoch=epoch, mode=padding_mode)
 
 
 def set_free_cpu(rate=0.1, need_cpu=15):
@@ -81,5 +93,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    # set_free_cpu()
+    set_free_cpu()
     main()

@@ -186,7 +186,9 @@ if __name__ == "__main__":
     # model_name = "ELIC_EEM_SE_res"
     # model_name = "ELIC_united4_SE_res"
     # sunrgbd
-    model_name = "ELIC_united_lh"
+    # model_name = "ELIC_united_lh"
+    # model_name = ".75"
+    model_name = "ELIC_united-1"
 
     dirs = get_dir_list(root, model_name)
     print(dirs)

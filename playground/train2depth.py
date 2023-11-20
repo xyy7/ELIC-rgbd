@@ -49,6 +49,7 @@ from torchvision import transforms
 from torchvision.transforms import ToPILImage
 from utils import util
 
+from loss import ssim
 from utils_edge import nyuv2
 
 # from compressai.zoo.image import model_architectures as architectures
@@ -85,11 +86,12 @@ def compute_metrics(a: Union[np.array, Image.Image], b: Union[np.array, Image.Im
 class RateDistortionLoss(nn.Module):
     """Custom rate distortion loss with a Lagrangian parameter."""
 
-    def __init__(self, lmbda=1e-2, metrics="mse"):
+    def __init__(self, lmbda=1e-2, metrics="depth"):
         super().__init__()
         self.mse = nn.MSELoss()
         self.lmbda = lmbda
         self.metrics = metrics
+        self.l1_criterion = nn.L1Loss()
 
     def forward(self, output, target):
         N, _, H, W = target.size()
@@ -105,8 +107,45 @@ class RateDistortionLoss(nn.Module):
             out["mse_loss"] = None
             out["ms_ssim_loss"] = 1 - ms_ssim(output["x_hat"], target, data_range=1.0)
             out["loss"] = self.lmbda * out["ms_ssim_loss"] + out["bpp_loss"]
+        else:
+            # depth loss
+            d = output["x_hat"]
+            depth = target
+            out["d_mse_loss"] = self.mse(d, depth)  # mse可能会导致图像平滑，不适用
+            out["l1_loss"] = self.l1_criterion(d, depth)
+
+            output_dx, output_dy = gradient(d)
+            target_dx, target_dy = gradient(depth)
+            grad_diff_x = torch.abs(output_dx - target_dx)
+            grad_diff_y = torch.abs(output_dy - target_dy)
+            out["edge_loss"] = torch.mean(grad_diff_x + grad_diff_y)
+
+            out["ssim_loss"] = torch.clamp((1 - ssim(d, depth, val_range=1)) * 0.5, 0, 1)
+            # out["d_loss"] = out["ssim_loss"] + out["edge_loss"] + 0.1 * out["l1_loss"]
+            out["mse_loss"] = out["ssim_loss"] + out["edge_loss"] + 0.1 * out["l1_loss"]
+            out["loss"] = self.lmbda * 255**2 * 0.1 * out["mse_loss"] + out["bpp_loss"]  # 方便打印
+            # print("in dloss")
 
         return out
+
+
+def gradient(x):
+    # tf.image.image_gradients(image)
+    h_x = x.size()[-2]
+    w_x = x.size()[-1]
+    # gradient step=1
+    l = x
+    r = F.pad(x, [0, 1, 0, 0])[:, :, :, 1:]
+    t = x
+    b = F.pad(x, [0, 0, 0, 1])[:, :, 1:, :]
+
+    dx, dy = torch.abs(r - l), torch.abs(b - t)
+    # dx will always have zeros in the last column, r-l
+    # dy will always have zeros in the last row,    b-t
+    dx[:, :, :, -1] = 0
+    dy[:, :, -1, :] = 0
+
+    return dx, dy
 
 
 class AverageMeter:
@@ -184,30 +223,19 @@ def train_one_epoch(model, criterion, train_dataloader, optimizer, aux_optimizer
             tb_logger.add_scalar("{}".format("[train]: bpp_loss"), out_criterion["bpp_loss"].item(), current_step)
             if out_criterion["mse_loss"] is not None:
                 tb_logger.add_scalar("{}".format("[train]: mse_loss"), out_criterion["mse_loss"].item(), current_step)
-            if out_criterion["ms_ssim_loss"] is not None:
-                tb_logger.add_scalar("{}".format("[train]: ms_ssim_loss"), out_criterion["ms_ssim_loss"].item(), current_step)
+            # if out_criterion["ms_ssim_loss"] is not None:
+            #     tb_logger.add_scalar("{}".format("[train]: ms_ssim_loss"), out_criterion["ms_ssim_loss"].item(), current_step)
 
         if i % 100 == 0:
-            if out_criterion["ms_ssim_loss"] is None:
-                logger_train.info(
-                    f"Train epoch {epoch}: ["
-                    f"{i*len(d):5d}/{len(train_dataloader.dataset)}"
-                    f" ({100. * i / len(train_dataloader):.0f}%)] "
-                    f'Loss: {out_criterion["loss"].item():.4f} | '
-                    f'MSE loss: {out_criterion["mse_loss"].item():.4f} | '
-                    f'Bpp loss: {out_criterion["bpp_loss"].item():.2f} | '
-                    f"Aux loss: {aux_loss.item():.2f}"
-                )
-            else:
-                logger_train.info(
-                    f"Train epoch {epoch}: ["
-                    f"{i*len(d):5d}/{len(train_dataloader.dataset)}"
-                    f" ({100. * i / len(train_dataloader):.0f}%)] "
-                    f'Loss: {out_criterion["loss"].item():.4f} | '
-                    f'MS-SSIM loss: {out_criterion["ms_ssim_loss"].item():.4f} | '
-                    f'Bpp loss: {out_criterion["bpp_loss"].item():.2f} | '
-                    f"Aux loss: {aux_loss.item():.2f}"
-                )
+            logger_train.info(
+                f"Train epoch {epoch}: ["
+                f"{i*len(d):5d}/{len(train_dataloader.dataset)}"
+                f" ({100. * i / len(train_dataloader):.0f}%)] "
+                f'Loss: {out_criterion["loss"].item():.4f} | '
+                f'MSE loss: {out_criterion["mse_loss"].item():.4f} | '
+                f'Bpp loss: {out_criterion["bpp_loss"].item():.2f} | '
+                f"Aux loss: {aux_loss.item():.2f}"
+            )
 
     return current_step
 
@@ -236,8 +264,8 @@ def test_epoch(epoch, test_dataloader, model, criterion, save_dir, logger_val, t
             loss.update(out_criterion["loss"])
             if out_criterion["mse_loss"] is not None:
                 mse_loss.update(out_criterion["mse_loss"])
-            if out_criterion["ms_ssim_loss"] is not None:
-                ms_ssim_loss.update(out_criterion["ms_ssim_loss"])
+            # if out_criterion["ms_ssim_loss"] is not None:
+            #     ms_ssim_loss.update(out_criterion["ms_ssim_loss"])
 
             # for num in range(len(d)):
             # 转成图像应该很费时间吧
@@ -275,17 +303,17 @@ def test_epoch(epoch, test_dataloader, model, criterion, save_dir, logger_val, t
             f"MS-SSIM: {ms_ssim.avg:.6f}"
         )
         tb_logger.add_scalar("{}".format("[val]: mse_loss"), mse_loss.avg, epoch + 1)
-    if out_criterion["ms_ssim_loss"] is not None:
-        logger_val.info(
-            f"Test epoch {epoch}: Average losses: "
-            f"Loss: {loss.avg:.4f} | "
-            f"MS-SSIM loss: {ms_ssim_loss.avg:.4f} | "
-            f"Bpp loss: {bpp_loss.avg:.2f} | "
-            f"Aux loss: {aux_loss.avg:.2f} | "
-            f"PSNR: {psnr.avg:.6f} | "
-            f"MS-SSIM: {ms_ssim.avg:.6f}"
-        )
-        tb_logger.add_scalar("{}".format("[val]: ms_ssim_loss"), ms_ssim_loss.avg, epoch + 1)
+    # if out_criterion["ms_ssim_loss"] is not None:
+    #     logger_val.info(
+    #         f"Test epoch {epoch}: Average losses: "
+    #         f"Loss: {loss.avg:.4f} | "
+    #         f"MS-SSIM loss: {ms_ssim_loss.avg:.4f} | "
+    #         f"Bpp loss: {bpp_loss.avg:.2f} | "
+    #         f"Aux loss: {aux_loss.avg:.2f} | "
+    #         f"PSNR: {psnr.avg:.6f} | "
+    #         f"MS-SSIM: {ms_ssim.avg:.6f}"
+    #     )
+    #     tb_logger.add_scalar("{}".format("[val]: ms_ssim_loss"), ms_ssim_loss.avg, epoch + 1)
 
     return loss.avg
 

@@ -62,6 +62,7 @@ class SE_Block(nn.Module):
     def __init__(self, ch_in, reduction=16):
         super(SE_Block, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)  # 全局自适应池化
+        # self.max_pool = nn.AdaptiveMaxPool2d(1)
         self.fc = nn.Sequential(nn.Linear(ch_in, ch_in // reduction, bias=False), nn.ReLU(inplace=True), nn.Linear(ch_in // reduction, ch_in, bias=False), nn.Sigmoid())
 
     def forward(self, x):
@@ -88,14 +89,20 @@ class ESA(nn.Module):
     def forward(self, x):
         f = x
         c1_ = self.conv1(f)  # 1*1卷积，降低维度（减少计算复杂度）
-        c1 = self.conv2(c1_)  # 减小特征图尺寸
-        v_max = F.max_pool2d(c1, kernel_size=7, stride=3)  # 减小特征图尺寸，增大感受野
-        v_range = self.relu(self.conv_max(v_max))
-        c3 = self.relu(self.conv3(v_range))
-        c3 = self.conv3_(c3)
+
+        # 下采样-最大值池化-插值上采样
+        c1 = self.conv2(c1_)  # k3s2,减小特征图尺寸
+        v_max = F.max_pool2d(c1, kernel_size=7, stride=3)  # k3,s7 减小特征图尺寸，增大感受野
+
+        v_range = self.relu(self.conv_max(v_max))  # k3s1
+        c3 = self.relu(self.conv3(v_range))  # k3s1
+        c3 = self.conv3_(c3)  # k3s1
+
         c3 = F.interpolate(c3, (x.size(2), x.size(3)), mode="bilinear", align_corners=False)  # 上采样，恢复特征图尺寸
-        cf = self.conv_f(c1_)  #
-        c4 = self.conv4(c3 + cf)  # 1*1卷积恢复通道数
+
+        # 残差连接恢复通道
+        cf = self.conv_f(c1_)  # k1s1
+        c4 = self.conv4(c3 + cf)  # k1s1,残差
         m = self.sigmoid(c4)  # 生成mask
 
         return x * m
