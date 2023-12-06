@@ -12,6 +12,7 @@ import faulthandler
 from config.args import test_options
 from config.config import model_config
 from models import ELIC
+from models.Cheng2020withCKBD import Cheng2020AnchorwithCheckerboard
 from PIL import Image, ImageFile
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -31,12 +32,13 @@ def main():
     config = model_config()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.channel = 3 if args.split == "rgb" else 1
+    args.model = "ckbd"
     if args.experiment == "":
         args.experiment = f"nyuv2_{args.split}_{args.model}_{args.quality}"
         print("exp name:", args.experiment)
 
     ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    if os.path.exists(ckt_path) and not args.checkpoint:
+    if os.path.exists(ckt_path):
         args.checkpoint = ckt_path
 
     # logger增加epoch名称
@@ -55,7 +57,9 @@ def main():
     test_dataset = ImageFolder(args.dataset, split=args.split, transform=test_transforms)
     test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False)
 
-    net = ELIC(config=config, ch=args.channel)
+    # net = ELIC(config=config, ch=args.channel)
+    net = Cheng2020AnchorwithCheckerboard(channel=args.channel)
+
     net = net.to(device)
     net.load_state_dict(checkpoint["state_dict"])
     net.update(force=True)

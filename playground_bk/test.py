@@ -20,6 +20,7 @@ from utils.logger import setup_logger
 from utils.testing import test_model
 
 faulthandler.enable()
+A = 30
 
 
 def main():
@@ -36,7 +37,7 @@ def main():
         print("exp name:", args.experiment)
 
     ckt_path = os.path.join("../experiments", args.experiment, "checkpoints", "checkpoint_best_loss.pth.tar")
-    if os.path.exists(ckt_path) and not args.checkpoint:
+    if os.path.exists(ckt_path):
         args.checkpoint = ckt_path
 
     # logger增加epoch名称
@@ -48,14 +49,23 @@ def main():
     if not os.path.exists(os.path.join("../experiments", args.experiment)):
         os.makedirs(os.path.join("../experiments", args.experiment))
     padding_mode = "replicate0"
-    setup_logger("test", os.path.join("../experiments", args.experiment), f"test_epoch{epoch}" + args.experiment + " " + padding_mode, level=logging.INFO, screen=True, tofile=True)
+    setup_logger(
+        "test",
+        os.path.join("../experiments", args.experiment),
+        f"test_epoch{epoch}" + args.experiment + " " + padding_mode,
+        level=logging.INFO,
+        screen=True,
+        tofile=True,
+    )
     logger_test = logging.getLogger("test")
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
     test_dataset = ImageFolder(args.dataset, split=args.split, transform=test_transforms)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False)
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False
+    )
 
-    net = ELIC(config=config, ch=args.channel)
+    net = ELIC(config=config, channel=args.channel)
     net = net.to(device)
     net.load_state_dict(checkpoint["state_dict"])
     net.update(force=True)
@@ -63,7 +73,14 @@ def main():
     save_dir = os.path.join("../experiments", args.experiment, "codestream", "%02d" % (epoch + 1))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    test_model(net=net, test_dataloader=test_dataloader, logger_test=logger_test, save_dir=save_dir, epoch=epoch, mode=padding_mode)
+    test_model(
+        net=net,
+        test_dataloader=test_dataloader,
+        logger_test=logger_test,
+        save_dir=save_dir,
+        epoch=epoch,
+        mode=padding_mode,
+    )
 
 
 def set_free_cpu(rate=0.1, need_cpu=15):
@@ -81,5 +98,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    # set_free_cpu()
+    set_free_cpu()
     main()

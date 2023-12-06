@@ -9,11 +9,52 @@ from compressai.models import CompressionModel
 from compressai.ops import ste_round
 from modules.transform import *
 from utils.ckbd import *
-from utils.func import get_scale_table, update_registered_buffers
+from utils.moduleFunc import get_scale_table, update_registered_buffers
 
 
-class ELIC(CompressionModel):
-    def __init__(self, config, channel=3, return_mid=False, **kwargs):
+class Feature_encoder(nn.Module):
+    def __init__(self, in_channel=3, out_channel=64, stride=1) -> None:
+        super().__init__()
+        self.conv1 = conv3x3(in_channel, out_channel, stride)
+        self.resblock1 = ResidualBlock(64, 64)
+        self.resblock2 = ResidualBlock(64, 64)
+        self.resblock3 = ResidualBlock(64, 64)
+
+    def forward(self, x):
+        out = self.conv1(x)
+        shortcut = out
+        out = self.resblock1(out)
+        out = self.resblock2(out)
+        out = self.resblock3(out)
+
+        out = out + shortcut
+        return out
+
+
+class Feature_decoder(nn.Module):
+    def __init__(self, in_channel=64, out_channel=3, stride=1) -> None:
+        super().__init__()
+
+        self.resblock1 = ResidualBlock(in_channel, 64)
+        self.resblock2 = ResidualBlock(64, 64)
+        self.resblock3 = ResidualBlock(64, 64)
+        self.deconv1 = deconv(64, out_channel, kernel_size=3, stride=stride)
+        self.conv = conv1x1(in_ch=in_channel, out_ch=64)
+
+    def forward(self, x):
+        shortcut = x
+
+        out = self.resblock1(x)
+        out = self.resblock2(out)
+        out = self.resblock3(out)
+        out = out + self.conv(shortcut)
+        out = self.deconv1(out)
+
+        return out
+
+
+class ELIC_master(CompressionModel):
+    def __init__(self, config, ch=3, **kwargs):
         super().__init__(config.N, **kwargs)
 
         N = config.N
@@ -23,8 +64,8 @@ class ELIC(CompressionModel):
         self.quant = config.quant  # noise or ste
         self.slice_num = slice_num
         self.slice_ch = slice_ch
-        self.g_a = AnalysisTransformEX(N, M, ch=channel, act=nn.ReLU)
-        self.g_s = SynthesisTransformEX(N, M, ch=channel,return_mid=return_mid act=nn.ReLU)
+        self.g_a = AnalysisTransformEX(N, M, ch=128, act=nn.ReLU)  # [fv,fv_bar]
+        self.g_s = SynthesisTransformPlus(N, M, ch=N, act=nn.ReLU)
         # Hyper Transform
         self.h_a = HyperAnalysisEX(N, M, act=nn.ReLU)
         self.h_s = HyperSynthesisEX(N, M, act=nn.ReLU)
@@ -55,9 +96,22 @@ class ELIC(CompressionModel):
 
         # Gussian Conditional
         self.gaussian_conditional = GaussianConditional(None)
-        self.return_mid = return_mid
 
-    def forward(self, x):
+        if ch == 3:
+            aux_ch = 1
+        elif ch == 1:
+            aux_ch = 3
+        self.aux_encoder = Feature_encoder(in_channel=aux_ch)
+        self.master_encoder = Feature_encoder(in_channel=ch)
+        self.master_decoder = Feature_decoder(in_channel=N + 64, out_channel=ch)
+        self.channel_aligner = Channel_aligner()
+
+    def forward(self, x, aux=None, aux_out=None):
+        aux_f = self.aux_encoder(aux)
+        fv = self.master_encoder(x)
+        fv_bar, beta, gamma = self.channel_aligner(fv, aux_f)
+        x = torch.cat([fv, fv_bar], dim=1)
+
         y = self.g_a(x)
         z = self.h_a(y)
         z_hat, z_likelihoods = self.entropy_bottleneck(z)
@@ -67,12 +121,12 @@ class ELIC(CompressionModel):
         # Hyper-parameters
         hyper_params = self.h_s(z_hat)
         y_slices = [
-            y[:, sum(self.slice_ch[:i]) : sum(self.slice_ch[: (i + 1)]), ...] for i in range(len(self.slice_ch))  # 通道分割
+            y[:, sum(self.slice_ch[:i]) : sum(self.slice_ch[: (i + 1)]), ...] for i in range(len(self.slice_ch))
         ]
         y_hat_slices = []
         y_likelihoods = []
         for idx, y_slice in enumerate(y_slices):
-            slice_anchor, slice_nonanchor = ckbd_split(y_slice)  # 棋盘分割
+            slice_anchor, slice_nonanchor = ckbd_split(y_slice)
             if idx == 0:
                 # Anchor
                 params_anchor = self.entropy_parameters_anchor[idx](hyper_params)
@@ -156,14 +210,21 @@ class ELIC(CompressionModel):
         y_hat = torch.cat(y_hat_slices, dim=1)
         y_likelihoods = torch.cat(y_likelihoods, dim=1)
 
-        if not self.return_mid:
-            x_hat = self.g_s(y_hat)
-            return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}}
+        up1 = aux_out["up1"]
+        up2 = aux_out["up2"]
+        up3 = aux_out["up3"]
+        x_hat = self.g_s(y_hat, up1, up2, up3)
+        x_hat = torch.cat([fv_bar, x_hat], dim=1)
+        x_hat = self.master_decoder(x_hat)
 
-        x_hat, up1, up2, up3 = self.g_s(y_hat)
-        return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}, "up1": up1, "up2": up2, "up3": up3}
+        return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}}
 
-    def compress(self, x):
+    def compress(self, x, aux=None, aux_out=None):
+        aux_f = self.aux_encoder(aux)
+        fv = self.master_encoder(x)
+        fv_bar, beta, gamma = self.channel_aligner(fv, aux_f)
+        x = torch.cat([fv, fv_bar], dim=1)
+
         y = self.g_a(x)
         z = self.h_a(y)
 
@@ -243,12 +304,15 @@ class ELIC(CompressionModel):
         y_strings.append(y_string)
 
         torch.backends.cudnn.deterministic = False
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
+        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:], "beta": beta, "gamma": gamma}
 
-    def decompress(self, strings, shape):
+    def decompress(self, strings, shape, beta, gamma, aux, aux_out):
         torch.backends.cudnn.deterministic = True
         torch.cuda.synchronize()
         start_time = time.process_time()
+
+        aux_f = self.aux_encoder(aux)
+        fv_bar = gamma * aux_f + beta
 
         y_strings = strings[0][0]
         z_strings = strings[1]
@@ -308,19 +372,19 @@ class ELIC(CompressionModel):
 
         y_hat = torch.cat(y_hat_slices, dim=1)
         torch.backends.cudnn.deterministic = False
-
-        if self.return_mid:
-            x_hat, up1, up2, up3 = self.g_s(y_hat)
-        else:
-            x_hat = self.g_s(y_hat)
+        up1 = aux_out["up1"]
+        up2 = aux_out["up2"]
+        up3 = aux_out["up3"]
+        x_hat = self.g_s(y_hat, up1, up2, up3)
+        x_hat = torch.cat([fv_bar, x_hat], dim=1)
+        x_hat = self.master_decoder(x_hat)
 
         torch.cuda.synchronize()
         end_time = time.process_time()
 
         cost_time = end_time - start_time
-        if not self.return_mid:
-            return {"x_hat": x_hat, "cost_time": cost_time}
-        return {"x_hat": x_hat, "cost_time": cost_time, "up1": up1, "up2": up2, "up3": up3}
+
+        return {"x_hat": x_hat, "cost_time": cost_time}
 
     def update(self, scale_table=None, force=False):
         if scale_table is None:
