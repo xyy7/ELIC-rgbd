@@ -10,13 +10,13 @@ import numpy as np
 import torch
 import torch.distributed as dist
 import torch.optim as optim
+from dataset.trainDataset import nyuv2, sun
 from models import modelZoo
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from utils.IOutils import save_checkpoint
+from utils.IOutils import del_checkpoint, save_checkpoint
 from utils.logger import setup_logger
 from utils.parallelWraper import CustomDataDistParallel as DDP
-from dataset.trainDataset import nyuv2, sun
 
 
 class Trainer:
@@ -28,6 +28,7 @@ class Trainer:
         self.rank = args.local_rank
         self.epochs = args.epochs
         self.clip_max_norm = args.clip_max_norm
+        self.debug = args.debug
 
         self.channel = args.channel
         self.quality = args.quality
@@ -36,8 +37,10 @@ class Trainer:
             self.exp_name = args.experiment
         else:
             self.exp_name = self.get_exp_name(args.dataset, args.channel, args.model, args.quality)
-
-        self.exp_dir_path = os.path.join("../experiments", self.exp_name)
+        if self.debug:
+            self.exp_dir_path = os.path.join("../experiments_test", self.exp_name)
+        else:
+            self.exp_dir_path = os.path.join("../experiments", self.exp_name)
         self.ckpt_dir_path = os.path.join(self.exp_dir_path, "checkpoints")
         self.init_dir([self.exp_dir_path, self.ckpt_dir_path])
         self.logger_train, self.logger_val, self.tb_logger = self.init_logger(self.exp_dir_path, self.exp_name)
@@ -45,14 +48,14 @@ class Trainer:
         self.model_name = args.model
         for name, model in modelZoo.items():
             if args.model.find(name) != -1:
-                self.net = model(config=model_config, channel=args.channel)
+                self.net = model(config=model_config, channel=args.channel).to(self.device)
                 self.logger_train.info(f"model name: {name}")
                 break
         if self.rank == 0:
             self.logger_train.info(args)
             # self.logger_train.info(self.net)
         self.train_dataloader, self.val_dataloader = self.init_dataset(
-            args.dataset, args.val_dataset, args.batch_size, args.test_batch_size, args.num_workers
+            args.dataset, args.val_dataset, args.batch_size, args.test_batch_size, args.num_workers, args.channel
         )
         self.learning_rate = args.learning_rate
         self.aux_learning_rate = args.aux_learning_rate
@@ -102,10 +105,10 @@ class Trainer:
             lr_scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones=milestones, gamma=0.1)
         return lr_scheduler
 
-    def init_dataset(self, train_dataset, val_dataset, batch_size, test_batch_size, num_workers):
+    def init_dataset(self, train_dataset, val_dataset, batch_size, test_batch_size, num_workers, channel):
         Dataset = nyuv2 if train_dataset.find("nyu") != -1 else sun
-        train_dataset = Dataset(train_dataset, is_train=True, channel=self.channel)
-        val_dataset = Dataset(val_dataset, is_train=False, channel=self.channel)
+        train_dataset = Dataset(train_dataset, is_train=True, channel=channel, debug=self.debug)
+        val_dataset = Dataset(val_dataset, is_train=False, channel=channel)
 
         is_shuffle = True
         if self.dist:
@@ -119,9 +122,9 @@ class Trainer:
 
         train_dataloader = DataLoader(
             train_dataset,
-            batch_size=batch_size,
-            num_workers=num_workers,
-            shuffle=is_shuffle,
+            batch_size=batch_size if not self.debug else 4,
+            num_workers=num_workers if not self.debug else 4,
+            shuffle=is_shuffle if not self.debug else False,
             pin_memory=True,
             drop_last=True,
             sampler=train_sampler,
@@ -129,6 +132,8 @@ class Trainer:
         val_dataloader = DataLoader(
             val_dataset, batch_size=test_batch_size, num_workers=num_workers, pin_memory=True, sampler=val_sampler
         )
+        if self.debug:
+            return train_dataloader, train_dataloader
         return train_dataloader, val_dataloader
 
     def init_dir(self, dirs):
@@ -142,14 +147,17 @@ class Trainer:
         torch.backends.cudnn.deterministic = True
 
     def init_logger(self, exp_dir_path, exp_name):
-        setup_logger("train", exp_dir_path, "train_" + exp_name)
-        setup_logger("val", exp_dir_path, "val_" + exp_name)
+        log_level = logging.DEBUG if self.debug else logging.INFO
+        setup_logger("train", exp_dir_path, "train_" + exp_name, level=log_level)
+        setup_logger("val", exp_dir_path, "val_" + exp_name, level=log_level)
         logger_train = logging.getLogger("train")
         logger_val = logging.getLogger("val")
         tb_logger = SummaryWriter(log_dir="../tb_logger/" + exp_name)
         return logger_train, logger_val, tb_logger
 
     def restore(self, ckpt_path=None):
+        if ckpt_path is None:
+            return 0
         checkpoint = torch.load(ckpt_path)
         self.net.load_state_dict(checkpoint["state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer"])
@@ -165,8 +173,7 @@ class Trainer:
 
         if auto_restore and os.path.exists(os.path.join(self.ckpt_dir_path, "checkpoint_best_loss.pth.tar")):
             ckpt_path = os.path.join(self.ckpt_dir_path, "checkpoint_best_loss.pth.tar")
-        if ckpt_path:
-            start_epoch = self.restore(ckpt_path)
+        start_epoch = self.restore(ckpt_path)
 
         self.net = self.net.to(self.device)
         if self.dist:
@@ -198,11 +205,15 @@ class Trainer:
         latest_path = os.path.join(self.ckpt_dir_path, "checkpoint_latest.pth.tar")
         save_checkpoint(ckpt, is_best, latest_path)
 
-        if (epoch + 1) % every_epoch == 0:
+        if (epoch + 1) % every_epoch == 0 or self.debug:
             epoch_path = str(latest_path).replace("latest", f"epoch{epoch}")
             save_checkpoint(ckpt, is_best, epoch_path)
-        if is_best and self.rank == 0:
+        if (is_best or self.debug) and self.rank == 0:
             self.logger_val.info(f"epoch:{epoch + 1} best checkpoint saved.")
+        if self.debug:
+            # 保留best，方便restore
+            del_checkpoint(latest_path)
+            del_checkpoint(epoch_path)
 
     def train_one_epoch(self, epoch, current_step, clip_max_norm=1):
         pass

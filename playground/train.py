@@ -20,9 +20,9 @@ sys.path.append("..")  # ELIC
 
 from config.args import train_options
 from config.config import model_config
+from training.trainer_master import TrainerMaster
 from training.trainer_single import TrainerSingle
 from training.trainer_united import TrainerUnited
-from training.trainer_master import TrainerMaster
 
 
 def gitIt(exp_name):
@@ -41,11 +41,14 @@ def main(argv):
         gitIt(args.experiment)
 
     if args.channel == 4:
+        print("TrainerUnited")
         trainer = TrainerUnited(args, config)
     else:
-        if args.model.find("master"):
+        if args.model.find("master") != -1:
+            print("TrainerMaster")
             trainer = TrainerMaster(args, config)
         else:
+            print("TrainerSingle")
             trainer = TrainerSingle(args, config)
     trainer.fit(seed=args.seed, auto_restore=args.auto_restore, ckpt_path=args.checkpoint)
 

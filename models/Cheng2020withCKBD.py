@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from compressai.ans import BufferedRansEncoder, RansDecoder
 from compressai.models import Cheng2020Anchor
 from compressai.ops import ste_round
-from utils.func import get_scale_table, update_registered_buffers
+from utils.moduleFunc import get_scale_table, update_registered_buffers
 
 
 class CheckerboardContext(nn.Conv2d):
@@ -45,7 +45,9 @@ class Cheng2020AnchorwithCheckerboard(Cheng2020Anchor):
 
     def __init__(self, N=192, channel=3, **kwargs):
         super().__init__(N, channel=channel, **kwargs)
-        self.context_prediction = CheckerboardContext(in_channels=N, out_channels=N * 2, kernel_size=5, stride=1, padding=2)
+        self.context_prediction = CheckerboardContext(
+            in_channels=N, out_channels=N * 2, kernel_size=5, stride=1, padding=2
+        )
 
     def forward(self, x):
         """
@@ -150,7 +152,9 @@ class Cheng2020AnchorwithCheckerboard(Cheng2020Anchor):
 
         z_hat = self.entropy_bottleneck.decompress(z_strings, shape)
         hyper_params = self.h_s(z_hat)
-        ctx_params_anchor = torch.zeros([z_hat.size(0), self.M * 2, z_hat.size(2) * 4, z_hat.size(3) * 4], device=z_hat.device)
+        ctx_params_anchor = torch.zeros(
+            [z_hat.size(0), self.M * 2, z_hat.size(2) * 4, z_hat.size(3) * 4], device=z_hat.device
+        )
         gaussian_params_anchor = self.entropy_parameters(torch.cat([ctx_params_anchor, hyper_params], dim=1))
         scales_anchor, means_anchor = gaussian_params_anchor.chunk(2, 1)
         anchor_hat = self.decompress_anchor(scales_anchor, means_anchor, decoder, cdf, cdf_lengths, offsets)
@@ -225,7 +229,10 @@ class Cheng2020AnchorwithCheckerboard(Cheng2020Anchor):
         means_anchor_squeeze = self.ckbd_anchor_sequeeze(means_anchor)
         indexes = self.gaussian_conditional.build_indexes(scales_anchor_squeeze)
         anchor_hat = decoder.decode_stream(indexes.reshape(-1).tolist(), cdf, cdf_lengths, offsets)
-        anchor_hat = torch.Tensor(anchor_hat).reshape(scales_anchor_squeeze.shape).to(scales_anchor.device) + means_anchor_squeeze
+        anchor_hat = (
+            torch.Tensor(anchor_hat).reshape(scales_anchor_squeeze.shape).to(scales_anchor.device)
+            + means_anchor_squeeze
+        )
         anchor_hat = self.ckbd_anchor_unsequeeze(anchor_hat)
         return anchor_hat
 
@@ -234,12 +241,20 @@ class Cheng2020AnchorwithCheckerboard(Cheng2020Anchor):
         means_nonanchor_squeeze = self.ckbd_nonanchor_sequeeze(means_nonanchor)
         indexes = self.gaussian_conditional.build_indexes(scales_nonanchor_squeeze)
         nonanchor_hat = decoder.decode_stream(indexes.reshape(-1).tolist(), cdf, cdf_lengths, offsets)
-        nonanchor_hat = torch.Tensor(nonanchor_hat).reshape(scales_nonanchor_squeeze.shape).to(scales_nonanchor.device) + means_nonanchor_squeeze
+        nonanchor_hat = (
+            torch.Tensor(nonanchor_hat).reshape(scales_nonanchor_squeeze.shape).to(scales_nonanchor.device)
+            + means_nonanchor_squeeze
+        )
         nonanchor_hat = self.ckbd_nonanchor_unsequeeze(nonanchor_hat)
         return nonanchor_hat
 
     def load_state_dict(self, state_dict):
-        update_registered_buffers(self.gaussian_conditional, "gaussian_conditional", ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"], state_dict)
+        update_registered_buffers(
+            self.gaussian_conditional,
+            "gaussian_conditional",
+            ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
+            state_dict,
+        )
         super().load_state_dict(state_dict)
 
     def update(self, scale_table=None, force=False):

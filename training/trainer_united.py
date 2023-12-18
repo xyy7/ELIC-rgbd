@@ -30,7 +30,7 @@ class TrainerUnited(Trainer):
         self.aux_optimizer.step()
 
         current_step += 1
-        if current_step % 100 == 0 and self.rank == 0:
+        if (current_step % 100 == 0 or self.debug) and self.rank == 0:
             self.tb_logger.add_scalar("{}".format("[train]: loss"), out_criterion["loss"].item(), current_step)
             self.tb_logger.add_scalar(
                 "{}".format("[train]: rbpp_loss"), out_criterion["r_bpp_loss"].item(), current_step
@@ -43,7 +43,7 @@ class TrainerUnited(Trainer):
             )
             self.tb_logger.add_scalar("{}".format("[train]: d_loss"), out_criterion["d_loss"].item(), current_step)
 
-        if i % 100 == 0 and self.rank == 0:
+        if (i % 100 == 0 or self.debug) and self.rank == 0:
             self.logger_train.info(
                 f"Train epoch {epoch}: ["
                 f"{i*self.train_dataloader.batch_size:5d}/{len(self.train_dataloader.dataset)}"
@@ -57,16 +57,19 @@ class TrainerUnited(Trainer):
             )
         return current_step
 
+    def forward(self, d):
+        rgb = d[0].to(self.device)
+        depth = d[1].to(self.device)
+        out_net = self.net(rgb, depth)
+        out_criterion = self.criterion(out_net, rgb, depth)
+        return out_criterion, out_net
+
     def train_one_epoch(self, epoch, current_step, clip_max_norm=1):
         self.net.train()
-        device = next(self.net.parameters()).device
         for i, d in enumerate(self.train_dataloader):
             self.optimizer.zero_grad()
             self.aux_optimizer.zero_grad()
-            rgb = d[0].to(device)
-            depth = d[1].to(device)
-            out_net = self.net(rgb, depth)
-            out_criterion = self.criterion(out_net, rgb, depth)
+            out_criterion, _ = self.forward(d)
             current_step = self.train_backward_and_log(out_criterion, clip_max_norm, i, epoch, current_step)
         return current_step
 
@@ -134,16 +137,14 @@ class TrainerUnited(Trainer):
 
         avgMeter = self.getAvgMeter()
         for i, d in enumerate(self.val_dataloader):
-            rgb, depth = d[0].to(device), d[1].to(device)
-            out_net = self.net(rgb, depth)
-            out_criterion = self.criterion(out_net, rgb, depth)
-            self.updateAvgMeter(avgMeter, out_criterion, out_net["x_hat"], (rgb, depth))
+            out_criterion, out_net = self.forward(d)
+            self.updateAvgMeter(avgMeter, out_criterion, out_net["x_hat"], (d[0], d[1]))
 
-            if i % 20 == 1 and self.rank == 0:
+            if (i % 20 == 1 or self.debug) and self.rank == 0:
                 saveImg(out_net["x_hat"]["r"][0], os.path.join(save_dir, "%03d_rgb_rec.png" % i))
                 saveImg(out_net["x_hat"]["d"][0], os.path.join(save_dir, "%03d_depth_rec.png" % i))
-                saveImg(d[0], os.path.join(save_dir, "%03d_rgb_gt.png" % i))
-                saveImg(d[1], os.path.join(save_dir, "%03d_depth_gt.png" % i))
+                saveImg(d[0][0], os.path.join(save_dir, "%03d_rgb_gt.png" % i))
+                saveImg(d[1][0], os.path.join(save_dir, "%03d_depth_gt.png" % i))
         self.validate_log(avgMeter, epoch)
         return avgMeter["loss"].avg
 

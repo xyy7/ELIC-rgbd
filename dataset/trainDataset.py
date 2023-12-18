@@ -12,19 +12,24 @@ from torchvision import transforms
 
 
 class BaseDataset(Dataset):
-    def __init__(self, train_dir, is_train, channel=4):
+    def __init__(self, train_dir, is_train, channel=4, debug=False):
         self.image_size = 256
         self.train = is_train
         self.channel = channel
         if channel > 1:
             rgb_dir = train_dir + "/color/*"
             self.rgb_files = sorted(glob.glob(rgb_dir))
+            if debug:
+                self.rgb_files = self.rgb_files[:100]
+
             self.len = len(self.rgb_files)
 
         if channel == 1 or channel == 4:
             depth_dir = train_dir + "/gt/*"
             self.depth_files = sorted(glob.glob(depth_dir))
             self.depth_max = 255
+            if debug:
+                self.depth_files = self.depth_files[:100]
             self.len = len(self.depth_files)
 
     def __getitemForChannel4__(self, index):
@@ -125,12 +130,12 @@ class BaseDataset(Dataset):
 
 
 class nyuv2(BaseDataset):
-    def __init__(self, train_dir, is_train, channel=4):
-        super().__init__(train_dir, is_train, channel)
+    def __init__(self, train_dir, is_train, channel=4, debug=False):
+        super().__init__(train_dir, is_train, channel, debug)
         self.depth_max = 255
 
 
 class sun(BaseDataset):
-    def __init__(self, train_dir, is_train, channel=4):
-        super().__init__(train_dir, is_train, channel)
+    def __init__(self, train_dir, is_train, channel=4, debug=False):
+        super().__init__(train_dir, is_train, channel, debug)
         self.depth_max = 100000

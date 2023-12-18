@@ -54,7 +54,7 @@ class Feature_decoder(nn.Module):
 
 
 class ELIC_master(CompressionModel):
-    def __init__(self, config, ch=3, **kwargs):
+    def __init__(self, config, channel=3, **kwargs):
         super().__init__(config.N, **kwargs)
 
         N = config.N
@@ -97,13 +97,13 @@ class ELIC_master(CompressionModel):
         # Gussian Conditional
         self.gaussian_conditional = GaussianConditional(None)
 
-        if ch == 3:
+        if channel == 3:
             aux_ch = 1
-        elif ch == 1:
+        elif channel == 1:
             aux_ch = 3
         self.aux_encoder = Feature_encoder(in_channel=aux_ch)
-        self.master_encoder = Feature_encoder(in_channel=ch)
-        self.master_decoder = Feature_decoder(in_channel=N + 64, out_channel=ch)
+        self.master_encoder = Feature_encoder(in_channel=channel)
+        self.master_decoder = Feature_decoder(in_channel=N + 64, out_channel=channel)
         self.channel_aligner = Channel_aligner()
 
     def forward(self, x, aux=None, aux_out=None):

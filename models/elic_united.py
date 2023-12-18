@@ -8,7 +8,7 @@ from compressai.models import CompressionModel
 from compressai.ops import ste_round
 from modules.transform import *
 from utils.ckbd import *
-from utils.func import get_scale_table, update_registered_buffers
+from utils.moduleFunc import get_scale_table, update_registered_buffers
 
 
 class ELIC_united(CompressionModel):

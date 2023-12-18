@@ -9,7 +9,7 @@ from compressai.models import CompressionModel
 from compressai.ops import ste_round
 from modules.transform import *
 from utils.ckbd import *
-from utils.func import get_scale_table, update_registered_buffers
+from utils.moduleFunc import get_scale_table, update_registered_buffers
 
 
 class ELIC(CompressionModel):
@@ -24,7 +24,7 @@ class ELIC(CompressionModel):
         self.slice_num = slice_num
         self.slice_ch = slice_ch
         self.g_a = AnalysisTransformEX(N, M, ch=channel, act=nn.ReLU)
-        self.g_s = SynthesisTransformEX(N, M, ch=channel,return_mid=return_mid act=nn.ReLU)
+        self.g_s = SynthesisTransformEX(N, M, ch=channel, return_mid=return_mid, act=nn.ReLU)
         # Hyper Transform
         self.h_a = HyperAnalysisEX(N, M, act=nn.ReLU)
         self.h_s = HyperSynthesisEX(N, M, act=nn.ReLU)
@@ -161,7 +161,13 @@ class ELIC(CompressionModel):
             return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}}
 
         x_hat, up1, up2, up3 = self.g_s(y_hat)
-        return {"x_hat": x_hat, "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods}, "up1": up1, "up2": up2, "up3": up3}
+        return {
+            "x_hat": x_hat,
+            "likelihoods": {"y_likelihoods": y_likelihoods, "z_likelihoods": z_likelihoods},
+            "up1": up1,
+            "up2": up2,
+            "up3": up3,
+        }
 
     def compress(self, x):
         y = self.g_a(x)

@@ -7,7 +7,7 @@ class ResidualBottleneck(nn.Module):
     def __init__(self, N=192, out=None, act=nn.ReLU) -> None:
         super().__init__()
 
-        out = N if out is not None else out
+        out = N if out is None else out
         self.branch = nn.Sequential(
             conv1x1(N, N // 2),
             act(),

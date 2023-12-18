@@ -22,12 +22,12 @@ from utils.testing import test_model
 faulthandler.enable()
 
 
-def main():
+def main(argv):
     torch.backends.cudnn.deterministic = True
     ImageFile.LOAD_TRUNCATED_IMAGES = True
     Image.MAX_IMAGE_PIXELS = None
 
-    args = test_options()
+    args = test_options(argv)
     config = model_config()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     args.channel = 3 if args.split == "rgb" else 1
@@ -48,12 +48,21 @@ def main():
     if not os.path.exists(os.path.join("../experiments", args.experiment)):
         os.makedirs(os.path.join("../experiments", args.experiment))
     padding_mode = "replicate0"
-    setup_logger("test", os.path.join("../experiments", args.experiment), f"test_epoch{epoch}" + args.experiment + " " + padding_mode, level=logging.INFO, screen=True, tofile=True)
+    setup_logger(
+        "test",
+        os.path.join("../experiments", args.experiment),
+        f"test_epoch{epoch}" + args.experiment + " " + padding_mode,
+        level=logging.INFO,
+        screen=True,
+        tofile=True,
+    )
     logger_test = logging.getLogger("test")
 
     test_transforms = transforms.Compose([transforms.ToTensor()])
     test_dataset = ImageFolder(args.dataset, split=args.split, transform=test_transforms)
-    test_dataloader = DataLoader(test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False)
+    test_dataloader = DataLoader(
+        test_dataset, batch_size=args.test_batch_size, num_workers=args.num_workers, shuffle=False
+    )
 
     net = ELIC(config=config, ch=args.channel)
     net = net.to(device)
@@ -63,7 +72,14 @@ def main():
     save_dir = os.path.join("../experiments", args.experiment, "codestream", "%02d" % (epoch + 1))
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    test_model(net=net, test_dataloader=test_dataloader, logger_test=logger_test, save_dir=save_dir, epoch=epoch, mode=padding_mode)
+    test_model(
+        net=net,
+        test_dataloader=test_dataloader,
+        logger_test=logger_test,
+        save_dir=save_dir,
+        epoch=epoch,
+        mode=padding_mode,
+    )
 
 
 def set_free_cpu(rate=0.1, need_cpu=15):
@@ -82,4 +98,4 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 if __name__ == "__main__":
     # set_free_cpu()
-    main()
+    main(sys.argv[1:])

@@ -6,22 +6,31 @@ sys.path.append("..")  # cd xx/playground
 import os
 
 import torch
-from utils.IOutils import saveImg
-from utils.metrics import AverageMeter, compute_metrics
 
 from .trainer import modelZoo
 from .trainer_single import TrainerSingle
+from .trainer_united import TrainerUnited
 
 
 class TrainerMaster(TrainerSingle):
     def __init__(self, args, model_config) -> None:
         super().__init__(args, model_config)
-        self.aux_net = modelZoo["ELIC"](config=model_config, channel=args.channel, return_mid=True).eval()
+        self.aux_channel = 3 if args.channel == 1 else 1
+        self.aux_net = modelZoo["ELIC"](config=model_config, channel=self.aux_channel, return_mid=True).eval()
         self.ckpt_path1 = args.checkpoint1
 
+        self.train_dataloader, self.val_dataloader = self.init_dataset(
+            args.dataset, args.val_dataset, args.batch_size, args.test_batch_size, args.num_workers, 4
+        )
+
     def forward(self, d):
-        aux = d[0].to(self.device)
-        d = d[1].to(self.device)
+        if self.channel == 1:
+            aux = d[0].to(self.device)
+            d = d[1].to(self.device)
+        else:
+            aux = d[1].to(self.device)
+            d = d[0].to(self.device)
+        self.logger_train.debug(f'{aux.shape}, {d.shape}')
         with torch.no_grad():
             out = self.aux_net(aux)
         out_net = self.net(d, out["x_hat"], out)

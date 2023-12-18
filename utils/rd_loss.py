@@ -97,12 +97,16 @@ class RateDistortionLossUnited(nn.Module):
         grad_diff_y = torch.abs(output_dy - target_dy)
         loss["edge_loss"] = torch.mean(grad_diff_x + grad_diff_y)
         loss["ssim_loss"] = torch.clamp((1 - ms_ssim(d, depth, data_range=1)) * 0.5, 0, 1)
+
         #  depth_loss': tensor(0.3145, device='cuda:0'),
         # 'edge_loss': tensor(0.0150, device='cuda:0'),
         # 'l1_loss': tensor(0.0056, device='cuda:0'),
         # 'ssim_loss': tensor(0.0012, device='cuda:0')
+
         # loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"] + 0.1 * loss["l1_loss"]
-        loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"]
+        loss["d_loss"] = loss["ssim_loss"] + 0.1 * loss["l1_loss"]
+        # loss["d_loss"] = loss["edge_loss"] + 0.1 * loss["l1_loss"]
+        # loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"]
         return loss
 
     def get_depth_loss(self, output, depth):

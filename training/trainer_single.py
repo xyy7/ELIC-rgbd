@@ -45,13 +45,13 @@ class TrainerSingle(Trainer):
 
         dloss_name = "mse_loss" if out_criterion["mse_loss"] is not None else "ms_ssim_loss"
         current_step += 1
-        if current_step % 100 == 0 and self.rank == 0:
+        if (current_step % 100 or self.debug) == 0 and self.rank == 0:
             self.tb_logger.add_scalar("{}".format("[train]: loss"), out_criterion["loss"].item(), current_step)
             self.tb_logger.add_scalar("{}".format("[train]: bpp_loss"), out_criterion["bpp_loss"].item(), current_step)
             self.tb_logger.add_scalar(
                 "{}".format(f"[train]: {dloss_name}"), out_criterion[dloss_name].item(), current_step
             )
-        if i % 100 == 0 and self.rank == 0:
+        if (i % 100 == 0 or self.debug) and self.rank == 0:
             self.logger_train.info(
                 f"Train epoch {epoch}: ["
                 f"{i*self.train_dataloader.batch_size:5d}/{len(self.train_dataloader.dataset)}"
@@ -110,8 +110,10 @@ class TrainerSingle(Trainer):
         avgMeter = self.getAvgMeter()
         for i, d in enumerate(self.val_dataloader):
             out_criterion, out_net = self.forward(d)
+            if isinstance(d, list):
+                d = d[1] if self.channel == 1 else d[0]
             self.updateAvgMeter(avgMeter, out_criterion, out_net["x_hat"], d)
-            if i % 20 == 1 and self.rank == 0:
+            if (i % 20 == 1 or self.debug) and self.rank == 0:
                 saveImg(out_net["x_hat"][0], os.path.join(save_dir, "%03d_rec.png" % i))
                 saveImg(d[0], os.path.join(save_dir, "%03d_gt.png" % i))
         self.validate_log(avgMeter, epoch)

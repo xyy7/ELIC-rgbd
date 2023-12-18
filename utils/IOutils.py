@@ -6,6 +6,7 @@ from pathlib import Path
 import PIL.Image as Image
 import torch
 from torchvision.transforms import ToPILImage
+import os
 
 """ configuration json """
 
@@ -107,3 +108,8 @@ def save_checkpoint(state, is_best, filename="checkpoint.pth.tar"):
     if is_best:
         best_filename = filename.replace(filename.split("/")[-1], "checkpoint_best_loss.pth.tar")
         shutil.copyfile(filename, best_filename)
+
+
+def del_checkpoint(filename="checkpoint.pth.tar"):
+    if os.path.exists(filename):
+        os.remove(filename)

@@ -1,0 +1,26 @@
+config = {
+    "cwd": "/home/xyy/ELIC/playground",
+    "name": "Python: train-united",
+    "type": "python",
+    "request": "launch",
+    "program": "train.py",
+    "console": "internalConsole",
+    "args": [
+        "--save",
+        "--gpu_id",
+        "6",
+        "-q",
+        "2_2",
+        "-e",
+        "10",
+        "-m",
+        "ELIC_united",
+        "--channel",
+        "4",
+        "--dataset",
+        "/data/xyy/sunrgbd/train/train",
+        "--val_dataset",
+        "/data/xyy/sunrgbd/train/val",
+        '--debug'
+    ],
+}
