@@ -11,9 +11,10 @@ from .tester_united import TesterUnited
 
 class TesterMaster(TesterUnited):
     def __init__(self, args, model_config) -> None:
-        super().__init__(args, model_config)
-        self.aux_net = modelZoo["ELIC"](config=model_config, channel=args.channel, return_mid=True).eval()
         self.ckpt_path1 = args.checkpoint1
+        self.aux_channel = 3 if args.channel == 1 else 1
+        self.aux_net = modelZoo["ELIC"](config=model_config, channel=self.aux_channel, return_mid=True).eval()
+        super().__init__(args, model_config)
 
     def restore(self, ckpt_path=None):
         epoch = super().restore(ckpt_path)
@@ -27,13 +28,7 @@ class TesterMaster(TesterUnited):
     def test_model(self, padding_mode="reflect0", padding=True):
         self.net.eval()
         avgMeter = self.getAvgMeter()
-        if not padding:
-            rec_dir = self.save_dir + "-CenterCrop"
-        else:
-            rec_dir = self.save_dir + "-padding-" + padding_mode
-        depth_rec_path = os.path.join(rec_dir, "depth_rec")
-        rgb_rec_path = os.path.join(rec_dir, "depth_rec")
-        self.init_dir([rec_dir, depth_rec_path, rgb_rec_path])
+        rec_dir = self.get_rec_dir(padding=padding, padding_mode=padding_mode)
 
         for i, (rgb, depth, rgb_img_name, depth_img_name) in enumerate(self.test_dataloader):
             rgb = rgb.to(self.device)
@@ -50,20 +45,20 @@ class TesterMaster(TesterUnited):
                 aux_bin = os.path.join(rec_dir, "depth_bin")
                 master_bin = os.path.join(rec_dir, "rgb_bin")
 
-            img_pad = pad(img, padding_mode=padding_mode, padding=False)
-            aux_pad = pad(aux, padding_mode=padding_mode, padding=False)
+            img_pad = pad(img, padding_mode=padding_mode, p=2**6)
+            aux_pad = pad(aux, padding_mode=padding_mode, p=2**6)
 
             B, C, H, W = img.shape
 
             aux_bpp, aux_enc_time = self.compress_one_image(
-                model=self.aux_net, x=aux_pad, stream_path=aux_bin, H=H, W=W, img_name=img_name[0]
+                net=self.aux_net, x=aux_pad, stream_path=aux_bin, H=H, W=W, img_name=img_name[0]
             )
             aux_hat, aux_dec_time, aux_out = self.decompress_one_image(
-                model=self.aux_net, stream_path=aux_bin, img_name=img_name[0], mode=padding_mode, return_mid=True
+                net=self.aux_net, stream_path=aux_bin, img_name=img_name[0], mode=padding_mode, return_mid=True
             )
 
             bpp, enc_time, beta, gamma = self.compress_master(
-                model=self.net,
+                net=self.net,
                 x=img_pad,
                 aux=aux_hat,
                 aux_out=aux_out,
@@ -73,7 +68,7 @@ class TesterMaster(TesterUnited):
                 img_name=img_name[0],
             )
             x_hat, dec_time = self.decompress_master(
-                model=self.net,
+                net=self.net,
                 aux=aux_hat,
                 aux_out=aux_out,
                 beta=beta,
@@ -83,6 +78,7 @@ class TesterMaster(TesterUnited):
                 mode=padding_mode,
             )
 
+            aux_hat = crop(aux_hat, padding_mode, (H, W))
             if C == 1:
                 rgb_x_hat = aux_hat
                 depth_x_hat = x_hat

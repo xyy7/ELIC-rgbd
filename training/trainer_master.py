@@ -30,7 +30,7 @@ class TrainerMaster(TrainerSingle):
         else:
             aux = d[1].to(self.device)
             d = d[0].to(self.device)
-        self.logger_train.debug(f'{aux.shape}, {d.shape}')
+        # self.logger_train.debug(f'{aux.shape}, {d.shape}')
         with torch.no_grad():
             out = self.aux_net(aux)
         out_net = self.net(d, out["x_hat"], out)

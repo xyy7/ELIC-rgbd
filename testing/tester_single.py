@@ -31,22 +31,26 @@ class TesterSingle(Tester):
         avgMeter["avg_deocde_time"].update(dec_time)
         avgMeter["avg_encode_time"].update(enc_time)
 
+    def get_rec_dir(self, padding=True, padding_mode="reflect0"):
+        if not padding:
+            rec_dir = os.path.join(self.save_dir, f"{self.epoch}-CenterCrop")
+        else:
+            rec_dir = os.path.join(self.save_dir, f"{self.epoch}-padding-{padding_mode}")
+        depth_rec_path = os.path.join(rec_dir, "depth_rec")
+        rgb_rec_path = os.path.join(rec_dir, "rgb_rec")
+        self.init_dir([rec_dir, depth_rec_path, rgb_rec_path])
+        return rec_dir
+
     @torch.no_grad()
     def test_model(self, padding_mode="reflect0", padding=True):
         self.net.eval()
         avgMeter = self.getAvgMeter()
-        if not padding:
-            rec_dir = self.save_dir + "-CenterCrop"
-        else:
-            rec_dir = self.save_dir + "-padding-" + padding_mode
-        depth_rec_path = os.path.join(rec_dir, "depth_rec")
-        rgb_rec_path = os.path.join(rec_dir, "depth_rec")
-        self.init_dir([rec_dir, depth_rec_path, rgb_rec_path])
+        rec_dir = self.get_rec_dir(padding=padding, padding_mode=padding_mode)
 
         for i, (img, img_name) in enumerate(self.test_dataloader):
             B, C, H, W = img.shape
             img = img.to(self.device)
-            img_pad = pad(img, padding_mode, False)
+            img_pad = pad(img, padding_mode, 2**6)
             if C == 1:
                 stream_path = os.path.join(rec_dir, "depth_bin")
             else:

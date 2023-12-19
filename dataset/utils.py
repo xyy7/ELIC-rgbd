@@ -81,8 +81,16 @@ def crop0(x, size):
     return x[:, :, 0 : size[0], 0 : size[1]]
 
 
-def pad(img, padding_mode, padding=False, p=2**6):
-    if not padding:
+def crop(img, padding_mode, size):
+    if padding_mode.find("0") != -1:
+        img_pad = crop0(img, size)
+    else:
+        img_pad = crop1(img, size)
+    return img_pad
+
+
+def pad(img, padding_mode, p=2**6):
+    if padding_mode.find("CenterCrop") != -1:
         img_pad = transforms.CenterCrop((448, 576))(img)
     else:
         if padding_mode.find("0") != -1:

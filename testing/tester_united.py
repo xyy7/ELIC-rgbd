@@ -17,9 +17,9 @@ class TesterUnited(TesterSingle):
     def __init__(self, args, model_config) -> None:
         super().__init__(args, model_config)
 
-    def init_dataset(self, test_dataset, test_batch_size, num_workers):
+    def init_dataset(self, test_dataset, test_batch_size, num_workers, channel):
         test_transforms = transforms.Compose([transforms.ToTensor()])
-        test_dataset = ImageFolderUnited(test_dataset, channel=self.channel, transform=test_transforms)
+        test_dataset = ImageFolderUnited(test_dataset, transform=test_transforms, debug=self.debug)
         test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, num_workers=num_workers, shuffle=False)
         return test_dataloader
 
@@ -49,24 +49,18 @@ class TesterUnited(TesterSingle):
     def test_model(self, padding_mode="reflect0", padding=True):
         self.net.eval()
         avgMeter = self.getAvgMeter()
-        if not padding:
-            rec_dir = self.save_dir + "-CenterCrop"
-        else:
-            rec_dir = self.save_dir + "-padding-" + padding_mode
-        depth_rec_path = os.path.join(rec_dir, "depth_rec")
-        rgb_rec_path = os.path.join(rec_dir, "depth_rec")
-        self.init_dir([rec_dir, depth_rec_path, rgb_rec_path])
+        rec_dir = self.get_rec_dir(padding=padding, padding_mode=padding_mode)
 
         for i, (rgb, depth, rgb_img_name, depth_img_name) in enumerate(self.test_dataloader):
             B, C, H, W = rgb.shape
+
             rgb = rgb.to(self.device)
             depth = depth.to(self.device)
 
-            rgb_pad = pad(rgb, padding_mode, False)
-            depth_pad = pad(depth, padding_mode, False)
+            rgb_pad = pad(rgb, padding_mode)
+            depth_pad = pad(depth, padding_mode)
             rgb_stream_path = os.path.join(rec_dir, "depth_bin")
             depth_stream_path = os.path.join(rec_dir, "rgb_bin")
-
             rgb_bpp, depth_bpp, enc_time = self.compress_one_image_united(
                 x=(rgb_pad, depth_pad),
                 stream_path=(rgb_stream_path, depth_stream_path),

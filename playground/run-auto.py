@@ -4,7 +4,15 @@ import re
 import time
 
 import psutil
-from pynvml import nvmlDeviceGetCount, nvmlDeviceGetHandleByIndex, nvmlDeviceGetMemoryInfo, nvmlDeviceGetName, nvmlDeviceGetTemperature, nvmlInit, nvmlShutdown
+from pynvml import (
+    nvmlDeviceGetCount,
+    nvmlDeviceGetHandleByIndex,
+    nvmlDeviceGetMemoryInfo,
+    nvmlDeviceGetName,
+    nvmlDeviceGetTemperature,
+    nvmlInit,
+    nvmlShutdown,
+)
 
 
 def get_free_gpu(using_rate=0.9, show_info=False):
@@ -44,7 +52,11 @@ def get_free_gpu(using_rate=0.9, show_info=False):
             free_gpus.append(i)
     # 打印所有GPU信息
     if show_info:
-        print("显卡名称：[{}]，显卡数量：[{}]，总共显存；[{}G]，空余显存：[{}G]，已用显存：[{}G]，显存占用率：[{:.2%}]。".format(gpu_name, deviceCount, total_memory, total_free, total_used, (total_used / total_memory)))
+        print(
+            "显卡名称：[{}]，显卡数量：[{}]，总共显存；[{}G]，空余显存：[{}G]，已用显存：[{}G]，显存占用率：[{:.2%}]。".format(
+                gpu_name, deviceCount, total_memory, total_free, total_used, (total_used / total_memory)
+            )
+        )
         print(free_gpus)
 
     # 关闭管理工具
@@ -65,53 +77,22 @@ def get_command(file):
 
 
 # python -m torch.distributed.launch --nproc_per_node=2 --nnodes=1 --master_port 6666 train2united.py -m ELIC_EEM --epochs 400 -lr 1e-4 --save --git --gpu_id 0,1 -q 2_3 --restore --dist&
-def every_x_minutes(x=5, sh_file="train_nyuv2_united.sh"):
+def every_x_minutes(x=5, sh_file="test_nyuv2.sh", need_gpus=2):
     cmds = get_command(sh_file)
     cmd_num = 0
-    while True:
-        # 处理
-        free_gpus = get_free_gpu()
-        if len(free_gpus) >= 2:
-            gpustr = f"{free_gpus[0]},{free_gpus[1]}"
-            cmd = re.sub(r"\d,\d", gpustr, cmds[cmd_num])
-            cmd = re.sub(r"--master_port \d*", "--master_port " + str(random.randint(6006, 8008)), cmd)
-            print(cmd)
-            os.system(cmd)
-            cmd_num += 1
-
-        # 等待
-        time.sleep(60 * x)  # 等待5分钟
-        # time.sleep(1)  # 等待1秒钟
-
-        # # 跳出
-        # if cmd_num == 3:
-        #     print(cmd_num)
-        #     break
-
-
-# for test or single gpu train
-def every_x_minutes_test(x=5, sh_file="test_nyuv2.sh"):
-    cmds = get_command(sh_file)
-    cmd_num = 0
-    while True:
-        # 处理
+    while cmd_num < len(cmds):
         free_gpus = get_free_gpu(0.9)
-        if len(free_gpus) >= 2:
-            gpustr = f"--gpu_id {free_gpus[0]},{free_gpus[1]}"
-            cmd = re.sub(r"--gpu_id \d,\d", gpustr, cmds[cmd_num])
-            # cmd = re.sub(r"--master_port \d*", "--master_port " + str(random.randint(6006, 8008)), cmd)
+        if len(free_gpus) >= need_gpus:
+            gpustr = f"--gpu_id {free_gpus[0:need_gpus]}"
+            gpustr = gpustr.replace("[", "").replace("]", "")
+            cmd = re.sub(r"--gpu_id \d.*?(?=\s)", gpustr, cmds[cmd_num])
+            if need_gpus > 1:
+                cmd = re.sub(r"--master_port \d*", "--master_port " + str(random.randint(6006, 8008)), cmd)
             print(cmd)
             os.system(cmd)
             cmd_num += 1
 
-        # 等待
         time.sleep(x * 60)  # 等待5分钟
-        # time.sleep(1)  # 等待1秒钟
-
-        # # 跳出
-        # if cmd_num == 3:
-        #     print(cmd_num)
-        #     break
 
 
 def set_free_cpu(rate=0.1, need_cpu=15):
@@ -125,6 +106,5 @@ def set_free_cpu(rate=0.1, need_cpu=15):
 
 
 if __name__ == "__main__":
-    # every_x_minutes(10)
-    # every_x_minutes_test(x=10, sh_file="train_nyuv2.sh")
-    every_x_minutes_test(x=10, sh_file="train_nyuv2_united.sh")
+    # set_free_cpu(need_cpu=20)
+    every_x_minutes(x=10, sh_file="train_sunrgbd.sh")

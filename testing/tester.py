@@ -19,12 +19,17 @@ class Tester:
         self.device = "cuda"
         self.channel = args.channel
         self.quality = args.quality
+        self.debug = args.debug
 
         if args.experiment is not None and args.experiment != "":
             self.exp_name = args.experiment
         else:
             self.exp_name = self.get_exp_name(args.dataset, args.channel, args.model, args.quality)
-        self.exp_dir_path = os.path.join("../experiments", self.exp_name)
+
+        if self.debug:
+            self.exp_dir_path = os.path.join("../experiments_test", self.exp_name)
+        else:
+            self.exp_dir_path = os.path.join("../experiments", self.exp_name)
         self.ckpt_dir_path = os.path.join(self.exp_dir_path, "checkpoints")
 
         self.model_name = args.model
@@ -32,10 +37,12 @@ class Tester:
 
         self.logger_test = self.init_logger(self.exp_dir_path, self.exp_name, self.epoch)
         self.log_init_info(args, model_config)
-        self.test_dataloader = self.init_dataset(
-            args.dataset, args.val_dataset, args.batch_size, args.test_batch_size, args.num_workers
-        )
-        self.save_dir = os.path.join("../experiments", self.exp_name, "codestream")
+        self.test_dataloader = self.init_dataset(args.dataset, args.test_batch_size, args.num_workers, self.channel)
+
+        if self.debug:
+            self.save_dir = os.path.join("../experiments_test", self.exp_name, "codestream")
+        else:
+            self.save_dir = os.path.join("../experiments", self.exp_name, "codestream")
         os.makedirs(self.save_dir, exist_ok=True)
 
     def log_init_info(self, args, config):
@@ -70,9 +77,9 @@ class Tester:
             return "nyuv2"
         return "sunrgbd"
 
-    def init_dataset(self, test_dataset, test_batch_size, num_workers):
+    def init_dataset(self, test_dataset, test_batch_size, num_workers, channel):
         test_transforms = transforms.Compose([transforms.ToTensor()])
-        test_dataset = ImageFolder(test_dataset, channel=self.channel, transform=test_transforms)
+        test_dataset = ImageFolder(test_dataset, channel=channel, transform=test_transforms, debug=self.debug)
         test_dataloader = DataLoader(test_dataset, batch_size=test_batch_size, num_workers=num_workers, shuffle=False)
         return test_dataloader
 
@@ -82,7 +89,8 @@ class Tester:
 
     def init_logger(self, exp_dir_path, exp_name, epoch):
         padding_mode = "replicate0"  # mode+direction
-        setup_logger("test", exp_dir_path, f"test_epoch{epoch}" + exp_name + " " + padding_mode)
+        log_level = logging.DEBUG if self.debug else logging.INFO
+        setup_logger("test", exp_dir_path, f"test_epoch{epoch}" + exp_name + " " + padding_mode, level=log_level)
         logger_test = logging.getLogger("test")
         logger_test.info(f"Start testing!")
         return logger_test
@@ -90,9 +98,6 @@ class Tester:
     def restore(self, ckpt_path=None):
         checkpoint = torch.load(ckpt_path)
         self.net.load_state_dict(checkpoint["state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer"])
-        self.aux_optimizer.load_state_dict(checkpoint["aux_optimizer"])
-        self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
         self.net.update(force=True)
         self.net = self.net.to(self.device)
         return checkpoint["epoch"]

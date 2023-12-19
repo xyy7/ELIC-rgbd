@@ -302,9 +302,9 @@ class ELIC_united_R2D(ELIC_united):
             rgb_cdf_lengths,
             rgb_offsets,
         )
-        rgb_local_ctx = self.rgb_local_context_anchor_with_nonanchor[idx](rgb_y_hat_slice)
         rgb_y_hat_slice = rgb_slice_nonanchor + rgb_slice_anchor
         rgb_y_hat_slices.append(rgb_y_hat_slice)
+        rgb_local_ctx = self.rgb_local_context_anchor_with_nonanchor[idx](rgb_y_hat_slice)
 
         # depth-nonanchor
         depth_params_nonanchor = self.depth_entropy_parameters_nonanchor[idx](

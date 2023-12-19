@@ -12,28 +12,29 @@ from torch.utils.data import Dataset
 
 # nyuv2处理
 class ImageFolder(Dataset):
-    def __init__(self, root="/data/chenminghui/nyud/nyu5k/nyuv2/test", transform=None, split="depth"):
+    def __init__(self, root="/data/xyy/nyu5k/nyuv2/test", transform=None, channel=3, debug=False):
+        if channel == 3:
+            self.mode = "RGB"
+            split = "rgb"
+        elif channel == 1:
+            self.mode = "L"
+            split = "depth"
+
         splitdir = Path(root) / split
         self.split = split
-        print(splitdir)
+        print(f"imagefolder: splitdir {splitdir}")
         if not splitdir.is_dir():
             raise RuntimeError(f'Invalid directory "{root}"')
 
-        if split == "rgb":
-            self.mode = "RGB"
-            # self.samples = ['/data/chenminghui/nyud/nyu5k/nyuv2/test/rgb/0009.png']
-        elif split == "depth":
-            self.mode = "L"
-            # self.samples = ['/data/chenminghui/nyud/nyu5k/nyuv2/test/depth/0009.png']
-
         self.samples = [f for f in splitdir.iterdir() if f.is_file()]
         self.samples.sort()  # 保证rgb能够根据index拿到相应的照片
+        if debug:
+            self.samples = self.samples[:20]
 
         self.transform = transform
 
     def __getitem__(self, index):
         imgname = str(self.samples[index])
-        print(imgname)
         img = cv2.imread(imgname, cv2.IMREAD_UNCHANGED)
         if img.ndim == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -65,9 +66,9 @@ class ImageFolder(Dataset):
 
 # nyuv2处理
 class ImageFolderUnited(Dataset):
-    def __init__(self, root="/data/chenminghui/nyud/nyu5k/nyuv2/test", transform=None):
-        self.rgb_dataloader = ImageFolder(root=root, transform=transform, split="rgb")
-        self.depth_dataloader = ImageFolder(root=root, transform=transform, split="depth")
+    def __init__(self, root="/data/xyy/nyu5k/nyuv2/test", transform=None, debug=False):
+        self.rgb_dataloader = ImageFolder(root=root, transform=transform, channel=3, debug=debug)
+        self.depth_dataloader = ImageFolder(root=root, transform=transform, channel=1, debug=debug)
 
     def __getitem__(self, index):
         rgb, rgb_path = self.rgb_dataloader.__getitem__(index)
