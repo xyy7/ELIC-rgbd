@@ -6,16 +6,18 @@ import re
 def collect_test_dirs(root, mode):
     dirs = os.listdir(root)
     dirs = [d for d in dirs if d.find(mode) != -1]
+    # dirs = [d for d in dirs if d.find(mode) != -1 and len(re.findall(r"(2_3|3_4|4_5|5_6)", d)) != 0]
     dirs.sort()
     return dirs
 
 
 # 根据log最后一行，获取相对应的数值
 # 23-09-18 18:08:10.491 - INFO: Epoch:[232] | Avg rBpp: 0.1566178 | Avg dBpp: 0.0115115 | Avg rPSNR: 34.3340977 | Avg dPSNR: 44.4662399 | Avg rMS-SSIM: 0.9712246 | Avg dMS-SSIM: 0.9943522 | Avg Encoding Latency: 0.256585 | Avg Decoding latency: 0.446901
+# 23-12-22 01:54:12.482 - INFO: Epoch:[393] | Avg Bpp: 0.1608634 | Avg Bpp: 0.0104611 | Avg PSNR: 34.8814676 | Avg PSNR: 44.6646419 | Avg MS-SSIM: 0.9723336 | Avg MS-SSIM: 0.9968961 | Avg Encoding Latency: 0.958903 | Avg Decoding latency: 0.786722
 def get_metrics_from_one_united_file(filename):
     with open(filename, encoding="utf8") as file:
         contents = file.readlines()[-1]
-        pattern = r"INFO: Epoch:\[\d*?\] \| Avg rBpp: (\d+\.\d*) \| Avg dBpp: (\d+\.\d*) \| Avg rPSNR: (\d+\.\d*) \| Avg dPSNR: (\d+\.\d*) \| Avg rMS-SSIM: (\d+\.\d*) \| Avg dMS-SSIM: (\d+\.\d*) \| Avg Encoding Latency: (\d+\.\d*) \| Avg Decoding latency: (\d+\.\d*)"
+        pattern = r"INFO: Epoch:\[\d*?\] \| Avg .*?Bpp: (\d+\.\d*) \| Avg .*?Bpp: (\d+\.\d*) \| Avg .*?PSNR: (\d+\.\d*) \| Avg .*?PSNR: (\d+\.\d*) \| Avg .*?MS-SSIM: (\d+\.\d*) \| Avg .*?MS-SSIM: (\d+\.\d*) \| Avg Encoding Latency: (\d+\.\d*) \| Avg Decoding latency: (\d+\.\d*)"
         res = re.findall(pattern, contents)
         res = [float(r.strip()) for r in res[0]]
     return res
@@ -60,8 +62,8 @@ def get_metrics_from_collected_united_dirs(root, dirs):
                 break
             except:
                 print(file, "not have been tested")
-                if os.path.exists(os.path.join(root, dir, file)):
-                    os.remove(os.path.join(root, dir, file))
+                # if os.path.exists(os.path.join(root, dir, file)):
+                #     os.remove(os.path.join(root, dir, file))
                 continue
         dir_list.append(dir)
         dpsnr_list.append(dpsnr)
@@ -172,10 +174,11 @@ def print_united_result_for_draw(result, mode="r"):
 
 if __name__ == "__main__":
     root = "../experiments"
-    model_name1 = "nyuv2_depth_ELIC_master-60"
+    model_name1 = "ELIC_united_wo_edge"
     model_name2 = "nyuv2_depth_ELIC_master-60"
     if model_name1.find("united") != -1:
         dirs = collect_test_dirs(root, model_name1)
+        print("test_dir:", dirs)
         rgb_metrics, depth_metrics = get_metrics_from_collected_united_dirs(root, dirs)
     else:
         rgb_dirs = collect_test_dirs(root, model_name1)

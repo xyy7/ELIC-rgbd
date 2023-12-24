@@ -155,25 +155,30 @@ class Trainer:
         tb_logger = SummaryWriter(log_dir="../tb_logger/" + exp_name)
         return logger_train, logger_val, tb_logger
 
-    def restore(self, ckpt_path=None):
+    def restore(self, ckpt_path=None, restore_epoch=0):
         if ckpt_path is None:
             return 0
         checkpoint = torch.load(ckpt_path)
         self.net.load_state_dict(checkpoint["state_dict"])
+        self.net.update(force=True)
+        self.net = self.net.to(self.device)
+        if restore_epoch != 0:
+            for _ in range(restore_epoch):
+                self.lr_scheduler.step()
+            return restore_epoch
+
         self.optimizer.load_state_dict(checkpoint["optimizer"])
         self.aux_optimizer.load_state_dict(checkpoint["aux_optimizer"])
         self.lr_scheduler.load_state_dict(checkpoint["lr_scheduler"])
-        self.net.update(force=True)
-        self.net = self.net.to(self.device)
         return checkpoint["epoch"]
 
-    def fit(self, seed=None, auto_restore=False, ckpt_path=None, start_epoch=0):
+    def fit(self, seed=None, auto_restore=False, ckpt_path=None, restore_epoch=0):
         if seed is not None:
             self.setup_seed(seed)
 
         if auto_restore and os.path.exists(os.path.join(self.ckpt_dir_path, "checkpoint_best_loss.pth.tar")):
             ckpt_path = os.path.join(self.ckpt_dir_path, "checkpoint_best_loss.pth.tar")
-        start_epoch = self.restore(ckpt_path)
+        start_epoch = self.restore(ckpt_path, restore_epoch)
 
         self.net = self.net.to(self.device)
         if self.dist:

@@ -101,7 +101,9 @@ class TesterUnited(TesterSingle):
         else:
             depth = depth_x_hat * 10000
         depth = depth.cpu().squeeze().numpy().astype("uint16")
-        cv2.imwrite(os.path.join(self.save_dir, "depth_rec", f"{img_name[0]}_rec_16bit.png"), depth)
+        self.logger_test.debug("16bit depth:")
+        self.logger_test.debug(str(os.path.join(rec_dir, "depth_rec", f"{img_name[0]}_rec_16bit.png")))
+        cv2.imwrite(os.path.join(rec_dir, "depth_rec", f"{img_name[0]}_rec_16bit.png"), depth)
 
         self.updateAvgMeter(avgMeter, rgb_p, rgb_m, rgb_bpp, depth_p, depth_m, depth_bpp, dec_time, enc_time)
         self.logger_test.info(
@@ -119,12 +121,12 @@ class TesterUnited(TesterSingle):
     def test_finish_log(self, avgMeter, rec_dir):
         self.logger_test.info(
             f"Epoch:[{self.epoch}] | "
-            f"Avg Bpp: {avgMeter['avg_rgb_bpp'].avg:.7f} | "
-            f"Avg Bpp: {avgMeter['avg_depth_bpp'].avg:.7f} | "
-            f"Avg PSNR: {avgMeter['avg_rgb_psnr'].avg:.7f} | "
-            f"Avg PSNR: {avgMeter['avg_depth_psnr'].avg:.7f} | "
-            f"Avg MS-SSIM: {avgMeter['avg_rgb_ms_ssim'].avg:.7f} | "
-            f"Avg MS-SSIM: {avgMeter['avg_depth_ms_ssim'].avg:.7f} | "
+            f"Avg rBpp: {avgMeter['avg_rgb_bpp'].avg:.7f} | "
+            f"Avg dBpp: {avgMeter['avg_depth_bpp'].avg:.7f} | "
+            f"Avg rPSNR: {avgMeter['avg_rgb_psnr'].avg:.7f} | "
+            f"Avg dPSNR: {avgMeter['avg_depth_psnr'].avg:.7f} | "
+            f"Avg rMS-SSIM: {avgMeter['avg_rgb_ms_ssim'].avg:.7f} | "
+            f"Avg dMS-SSIM: {avgMeter['avg_depth_ms_ssim'].avg:.7f} | "
             f"Avg Encoding Latency: {avgMeter['avg_encode_time'].avg:.6f} | "
             f"Avg Decoding latency: {avgMeter['avg_deocde_time'].avg:.6f}"
         )

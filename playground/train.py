@@ -50,7 +50,9 @@ def main(argv):
         else:
             print("TrainerSingle")
             trainer = TrainerSingle(args, config)
-    trainer.fit(seed=args.seed, auto_restore=args.auto_restore, ckpt_path=args.checkpoint)
+    trainer.fit(
+        seed=args.seed, auto_restore=args.auto_restore, ckpt_path=args.checkpoint, restore_epoch=args.start_epoch
+    )
 
 
 if __name__ == "__main__":

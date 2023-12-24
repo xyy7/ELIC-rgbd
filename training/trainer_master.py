@@ -37,8 +37,8 @@ class TrainerMaster(TrainerSingle):
         out_criterion = self.criterion(out_net, d)
         return out_criterion, out_net
 
-    def restore(self, ckpt_path=None):
-        epoch = super().restore(ckpt_path)
+    def restore(self, ckpt_path=None, restore_epoch=0):
+        epoch = super().restore(ckpt_path, restore_epoch)
         aux_checkpoint = torch.load(self.ckpt_path1)
         self.aux_net.load_state_dict(aux_checkpoint["state_dict"])
         self.aux_net.update(force=True)

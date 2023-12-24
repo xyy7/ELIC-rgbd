@@ -34,7 +34,7 @@ def main(argv):
         else:
             print("TesterSingle")
             tester = TesterSingle(args, config)
-    tester.test_model(padding_mode="reflect0", padding=True)
+    tester.test_model(padding_mode="replicate0", padding=True)
 
 
 if __name__ == "__main__":

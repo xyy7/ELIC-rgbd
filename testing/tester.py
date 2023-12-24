@@ -88,9 +88,9 @@ class Tester:
             os.makedirs(d, exist_ok=True)
 
     def init_logger(self, exp_dir_path, exp_name, epoch):
-        padding_mode = "replicate0"  # mode+direction
         log_level = logging.DEBUG if self.debug else logging.INFO
-        setup_logger("test", exp_dir_path, f"test_epoch{epoch}" + exp_name + " " + padding_mode, level=log_level)
+        print(f"test_epoch{epoch}" + exp_name)
+        setup_logger("test", exp_dir_path, f"test_epoch{epoch}" + exp_name, level=log_level)
         logger_test = logging.getLogger("test")
         logger_test.info(f"Start testing!")
         return logger_test
