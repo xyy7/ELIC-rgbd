@@ -85,6 +85,12 @@ class ELIC_united(CompressionModel):
         self.rgb_gaussian_conditional = GaussianConditional(None)
         self.depth_gaussian_conditional = GaussianConditional(None)
 
+    def count_parameters(self, only_trainable=False):
+        if only_trainable:
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        else:
+            return sum(p.numel() for p in self.parameters())
+
     def codeOnePart(self, slice_part, contextList, params_module, split_func, entropy_model, **kargs):
         params_one_part = params_module(torch.cat(contextList, 1))
         scales, means = params_one_part.chunk(2, 1)

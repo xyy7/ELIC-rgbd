@@ -1,15 +1,15 @@
+import copy
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from compressai.ans import BufferedRansEncoder, RansDecoder
-from compressai.entropy_models import EntropyBottleneck, GaussianConditional
-from compressai.layers import conv3x3, subpel_conv3x3
-from compressai.models import CompressionModel
-from compressai.ops import ste_round
 from modules.layers.conv import conv, conv1x1, conv3x3, deconv
+from modules.layers.res_blk import *
+from modules.transform.attention import bi_spf
 from timm.models.layers import DropPath, to_2tuple, trunc_normal_
-from utils.moduleFunc import get_scale_table, update_registered_buffers
+
+from .elic_united import ELIC_united
 
 
 class Mlp(nn.Module):
@@ -405,17 +405,15 @@ class PatchEmbed(nn.Module):
         return x
 
 
-class SymmetricalTransFormer(CompressionModel):
+class AnalysisTransformSTFunited(nn.Module):
     def __init__(
         self,
         pretrain_img_size=256,
         patch_size=2,
-        channel=3,
         embed_dim=48,
         depths=[2, 2, 6, 2],
         num_heads=[3, 6, 12, 24],
         window_size=4,
-        num_slices=12,
         mlp_ratio=4.0,
         qkv_bias=True,
         qk_scale=None,
@@ -424,37 +422,34 @@ class SymmetricalTransFormer(CompressionModel):
         drop_path_rate=0.2,
         norm_layer=nn.LayerNorm,
         patch_norm=True,
-        frozen_stages=-1,
         use_checkpoint=False,
-        **kwargs,
+        **kargs,
     ):
-        super().__init__(entropy_bottleneck_channels=embed_dim * 4)
-
+        super().__init__()
         self.pretrain_img_size = pretrain_img_size
         self.num_layers = len(depths)
         self.embed_dim = embed_dim
         self.patch_norm = patch_norm
-        self.frozen_stages = frozen_stages
-        self.num_slices = num_slices
-        self.max_support_slices = num_slices // 2
-        # split image into non-overlapping patches
-        self.patch_embed = PatchEmbed(
-            patch_size=patch_size,
-            in_chans=channel,
-            embed_dim=embed_dim,
-            norm_layer=norm_layer if self.patch_norm else None,
+
+        self.rgb_patch_embed = PatchEmbed(
+            patch_size=patch_size, in_chans=3, embed_dim=embed_dim, norm_layer=norm_layer if self.patch_norm else None
         )
 
+        self.depth_patch_embed = PatchEmbed(
+            patch_size=patch_size, in_chans=1, embed_dim=embed_dim, norm_layer=norm_layer if self.patch_norm else None
+        )
         self.pos_drop = nn.Dropout(p=drop_rate)
 
         # stochastic depth
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
 
         # build layers
-        self.ana_layers = nn.ModuleList()
+        self.rgb_ana_layers = nn.ModuleList()
+        self.depth_ana_layers = nn.ModuleList()
+        dim = embed_dim
         for i_layer in range(self.num_layers):
             layer = BasicLayer(
-                dim=int(embed_dim * 2**i_layer),
+                dim=dim,
                 depth=depths[i_layer],
                 num_heads=num_heads[i_layer],
                 window_size=window_size,
@@ -469,14 +464,88 @@ class SymmetricalTransFormer(CompressionModel):
                 use_checkpoint=use_checkpoint,
                 inverse=False,
             )
-            self.ana_layers.append(layer)
+            dim *= 2
+            self.rgb_ana_layers.append(layer)
+            self.depth_ana_layers.append(copy.deepcopy(layer))
+            if i_layer < self.num_layers - 1:
+                self.rgb_ana_layers.append(bi_spf(dim))
+                self.rgb_ana_layers.append(conv1x1(2 * dim, dim))
+                self.depth_ana_layers.append(nn.Identity())
+                self.depth_ana_layers.append(conv1x1(2 * dim, dim))
 
+    def forward(self, rgb, depth):
+        rgb = self.rgb_patch_embed(rgb)
+        depth = self.depth_patch_embed(depth)
+        B, C, Wh, Ww = rgb.shape
+
+        rgb = rgb.flatten(2).transpose(1, 2)
+        depth = depth.flatten(2).transpose(1, 2)
+        rgb = self.pos_drop(rgb)
+        depth = self.pos_drop(depth)
+
+        rgb_y = rgb
+        depth_y = depth
+
+        for num, (rgb_bk, depth_bk) in enumerate(zip(self.rgb_ana_layers, self.depth_ana_layers)):
+            if isinstance(rgb_bk, bi_spf):
+                rgb_y = rgb_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+                depth_y = depth_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+
+                depth_y = depth_bk(depth_y)
+                rgb_f, depth_f = rgb_bk(rgb_y, depth_y)
+                rgb_y = torch.cat((rgb_y, rgb_f), dim=-3)
+                depth_y = torch.cat((depth_y, depth_f), dim=-3)
+            elif isinstance(rgb_bk, nn.Conv2d):
+                rgb_y = rgb_bk(rgb_y)
+                depth_y = depth_bk(depth_y)
+                rgb_y = rgb_y.flatten(2).transpose(1, 2)
+                depth_y = depth_y.flatten(2).transpose(1, 2)
+            else:
+                rgb_y, _, _ = rgb_bk(rgb_y, Wh, Ww)
+                depth_y, Wh, Ww = depth_bk(depth_y, Wh, Ww)
+
+        C = self.embed_dim * 8
+        rgb_y = rgb_y.view(-1, Wh, Ww, C).permute(0, 3, 1, 2).contiguous()
+        depth_y = depth_y.view(-1, Wh, Ww, C).permute(0, 3, 1, 2).contiguous()
+        return rgb_y, depth_y
+
+
+class SynthesisTransformSTFunited(nn.Module):
+    def __init__(
+        self,
+        pretrain_img_size=256,
+        patch_size=2,
+        embed_dim=48,
+        depths=[2, 2, 6, 2],
+        num_heads=[3, 6, 12, 24],
+        window_size=4,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.2,
+        norm_layer=nn.LayerNorm,
+        patch_norm=True,
+        use_checkpoint=False,
+        **kargs,
+    ) -> None:
+        super().__init__()
+
+        self.pretrain_img_size = pretrain_img_size
+        self.num_layers = len(depths)
+        self.embed_dim = embed_dim
+        self.patch_norm = patch_norm
         depths = depths[::-1]
         num_heads = num_heads[::-1]
-        self.syn_layers = nn.ModuleList()
+        dpr = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]  # stochastic depth decay rule
+
+        self.rgb_syn_layers = nn.ModuleList()
+        self.depth_syn_layers = nn.ModuleList()
+        dim = embed_dim * 8
         for i_layer in range(self.num_layers):
             layer = BasicLayer(
-                dim=int(embed_dim * 2 ** (3 - i_layer)),
+                dim=dim,
                 depth=depths[i_layer],
                 num_heads=num_heads[i_layer],
                 window_size=window_size,
@@ -491,326 +560,116 @@ class SymmetricalTransFormer(CompressionModel):
                 use_checkpoint=use_checkpoint,
                 inverse=True,
             )
-            self.syn_layers.append(layer)
+            dim = dim // 2
+            self.rgb_syn_layers.append(layer)
+            self.depth_syn_layers.append(copy.deepcopy(layer))
+            if i_layer < self.num_layers - 1:
+                self.rgb_syn_layers.append(bi_spf(dim))
+                self.rgb_syn_layers.append(conv1x1(2 * dim, dim))
+                self.depth_syn_layers.append(nn.Identity())
+                self.depth_syn_layers.append(conv1x1(2 * dim, dim))
 
-        self.end_conv = nn.Sequential(
+        self.rgb_end_conv = nn.Sequential(
             nn.Conv2d(embed_dim, embed_dim * patch_size**2, kernel_size=5, stride=1, padding=2),
             nn.PixelShuffle(patch_size),
-            nn.Conv2d(embed_dim, channel, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(embed_dim, 3, kernel_size=3, stride=1, padding=1),
+        )
+        self.depth_end_conv = nn.Sequential(
+            nn.Conv2d(embed_dim, embed_dim * patch_size**2, kernel_size=5, stride=1, padding=2),
+            nn.PixelShuffle(patch_size),
+            nn.Conv2d(embed_dim, 1, kernel_size=3, stride=1, padding=1),
         )
 
-        num_features = [int(embed_dim * 2**i) for i in range(self.num_layers)]
-        self.num_features = num_features
-        self.g_a = None
-        self.g_s = None
+    def forward(self, rgb, depth):
+        B, C, Wh, Ww = rgb.shape
+        rgb_hat = rgb
+        depth_hat = depth
+        rgb_hat = rgb_hat.permute(0, 2, 3, 1).contiguous().view(-1, Wh * Ww, C)
+        depth_hat = depth_hat.permute(0, 2, 3, 1).contiguous().view(-1, Wh * Ww, C)
 
-        self.h_a = nn.Sequential(
-            conv3x3(384, 384),
-            nn.GELU(),
-            conv3x3(384, 336),
-            nn.GELU(),
-            conv3x3(336, 288, stride=2),
-            nn.GELU(),
-            conv3x3(288, 240),
-            nn.GELU(),
-            conv3x3(240, 192, stride=2),
+        for num, (rgb_bk, depth_bk) in enumerate(zip(self.rgb_syn_layers, self.depth_syn_layers)):
+            if isinstance(rgb_bk, bi_spf):
+                rgb_hat = rgb_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+                depth_hat = depth_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+                depth_hat = depth_bk(depth_hat)
+                rgb_f, depth_f = rgb_bk(rgb_hat, depth_hat)
+                rgb_hat = torch.cat((rgb_hat, rgb_f), dim=-3)
+                depth_hat = torch.cat((depth_hat, depth_f), dim=-3)
+            elif isinstance(rgb_bk, nn.Conv2d):
+                rgb_hat = rgb_bk(rgb_hat)
+                depth_hat = depth_bk(depth_hat)
+                rgb_hat = rgb_hat.flatten(2).transpose(1, 2)
+                depth_hat = depth_hat.flatten(2).transpose(1, 2)
+            else:
+                rgb_hat, _, _ = rgb_bk(rgb_hat, Wh, Ww)
+                depth_hat, Wh, Ww = depth_bk(depth_hat, Wh, Ww)
+
+        rgb_hat = self.rgb_end_conv(rgb_hat.view(-1, Wh, Ww, self.embed_dim).permute(0, 3, 1, 2).contiguous())
+        depth_hat = self.depth_end_conv(depth_hat.view(-1, Wh, Ww, self.embed_dim).permute(0, 3, 1, 2).contiguous())
+
+        return rgb_hat, depth_hat
+
+
+class SymmetricalTransFormerUnited(ELIC_united):
+    def __init__(
+        self,
+        pretrain_img_size=256,
+        patch_size=2,
+        channel=4,
+        embed_dim=48,
+        depths=[2, 2, 6, 2],
+        num_heads=[3, 6, 12, 24],
+        window_size=4,
+        num_slices=12,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        qk_scale=None,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.2,
+        norm_layer=nn.LayerNorm,
+        patch_norm=True,
+        use_checkpoint=False,
+        config=None,
+        **kwargs,
+    ):
+        config.slice_ch = [24, 24, 48, 96, 192]
+        config.N = 192
+        config.M = 384
+        super().__init__(config=config, **kwargs)
+        self.g_a = AnalysisTransformSTFunited(
+            pretrain_img_size=pretrain_img_size,
+            patch_size=patch_size,
+            embed_dim=embed_dim,
+            depths=depths,
+            num_heads=num_heads,
+            window_size=window_size,
+            num_slices=num_slices,
+            mlp_ratio=mlp_ratio,
+            qkv_bias=qkv_bias,
+            qk_scale=qk_scale,
+            drop_rate=drop_rate,
+            attn_drop_rate=attn_drop_rate,
+            drop_path_rate=drop_path_rate,
+            norm_layer=norm_layer,
+            patch_norm=patch_norm,
+            use_checkpoint=use_checkpoint,
         )
-
-        self.h_mean_s = nn.Sequential(
-            conv3x3(192, 240),
-            nn.GELU(),
-            subpel_conv3x3(240, 288, 2),
-            nn.GELU(),
-            conv3x3(288, 336),
-            nn.GELU(),
-            subpel_conv3x3(336, 384, 2),
-            nn.GELU(),
-            conv3x3(384, 384),
+        self.g_s = SynthesisTransformSTFunited(
+            pretrain_img_size=pretrain_img_size,
+            patch_size=patch_size,
+            embed_dim=embed_dim,
+            depths=depths,
+            num_heads=num_heads,
+            window_size=window_size,
+            num_slices=num_slices,
+            mlp_ratio=mlp_ratio,
+            qkv_bias=qkv_bias,
+            qk_scale=qk_scale,
+            drop_rate=drop_rate,
+            attn_drop_rate=attn_drop_rate,
+            drop_path_rate=drop_path_rate,
+            norm_layer=norm_layer,
+            patch_norm=patch_norm,
+            use_checkpoint=use_checkpoint,
         )
-        self.h_scale_s = nn.Sequential(
-            conv3x3(192, 240),
-            nn.GELU(),
-            subpel_conv3x3(240, 288, 2),
-            nn.GELU(),
-            conv3x3(288, 336),
-            nn.GELU(),
-            subpel_conv3x3(336, 384, 2),
-            nn.GELU(),
-            conv3x3(384, 384),
-        )
-        self.cc_mean_transforms = nn.ModuleList(
-            nn.Sequential(
-                conv(384 + 32 * min(i, 6), 224, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(224, 176, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(176, 128, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(128, 64, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(64, 32, stride=1, kernel_size=3),
-            )
-            for i in range(num_slices)
-        )
-        self.cc_scale_transforms = nn.ModuleList(
-            nn.Sequential(
-                conv(384 + 32 * min(i, 6), 224, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(224, 176, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(176, 128, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(128, 64, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(64, 32, stride=1, kernel_size=3),
-            )
-            for i in range(num_slices)
-        )
-        self.lrp_transforms = nn.ModuleList(
-            nn.Sequential(
-                conv(384 + 32 * min(i + 1, 7), 224, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(224, 176, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(176, 128, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(128, 64, stride=1, kernel_size=3),
-                nn.GELU(),
-                conv(64, 32, stride=1, kernel_size=3),
-            )
-            for i in range(num_slices)
-        )
-        self.entropy_bottleneck = EntropyBottleneck(embed_dim * 4)
-        self.gaussian_conditional = GaussianConditional(None)
-        self._freeze_stages()
-
-    def _freeze_stages(self):
-        if self.frozen_stages >= 0:
-            self.patch_embed.eval()
-            for param in self.patch_embed.parameters():
-                param.requires_grad = False
-
-        if self.frozen_stages >= 1 and self.ape:
-            self.absolute_pos_embed.requires_grad = False
-
-        if self.frozen_stages >= 2:
-            self.pos_drop.eval()
-            for i in range(0, self.frozen_stages - 1):
-                m = self.ana_layers[i]
-                m.eval()
-                for param in m.parameters():
-                    param.requires_grad = False
-
-    def init_weights(self):
-        for m in self.modules():
-            if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):
-                nn.init.kaiming_normal_(m.weight)
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.Linear):
-                trunc_normal_(m.weight, std=0.02)
-                if isinstance(m, nn.Linear) and m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.LayerNorm):
-                nn.init.constant_(m.bias, 0)
-                nn.init.constant_(m.weight, 1.0)
-
-    def forward(self, x):
-        """Forward function."""
-        x = self.patch_embed(x)
-
-        Wh, Ww = x.size(2), x.size(3)
-        x = x.flatten(2).transpose(1, 2)
-        x = self.pos_drop(x)
-        for i in range(self.num_layers):
-            layer = self.ana_layers[i]
-            x, Wh, Ww = layer(x, Wh, Ww)
-
-        y = x
-        C = self.embed_dim * 8
-        y = y.view(-1, Wh, Ww, C).permute(0, 3, 1, 2).contiguous()
-        y_shape = y.shape[2:]
-
-        z = self.h_a(y)
-        _, z_likelihoods = self.entropy_bottleneck(z)
-        z_offset = self.entropy_bottleneck._get_medians()
-        z_tmp = z - z_offset
-        z_hat = ste_round(z_tmp) + z_offset
-
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-        y_slices = y.chunk(self.num_slices, 1)
-        y_hat_slices = []
-        y_likelihood = []
-
-        for slice_index, y_slice in enumerate(y_slices):
-            support_slices = y_hat_slices if self.max_support_slices < 0 else y_hat_slices[: self.max_support_slices]
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, : y_shape[0], : y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, : y_shape[0], : y_shape[1]]
-
-            _, y_slice_likelihood = self.gaussian_conditional(y_slice, scale, mu)
-
-            y_likelihood.append(y_slice_likelihood)
-            y_hat_slice = ste_round(y_slice - mu) + mu
-
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-
-        y_hat = torch.cat(y_hat_slices, dim=1)
-        y_likelihoods = torch.cat(y_likelihood, dim=1)
-
-        y_hat = y_hat.permute(0, 2, 3, 1).contiguous().view(-1, Wh * Ww, C)
-        for i in range(self.num_layers):
-            layer = self.syn_layers[i]
-            y_hat, Wh, Ww = layer(y_hat, Wh, Ww)
-
-        x_hat = self.end_conv(y_hat.view(-1, Wh, Ww, self.embed_dim).permute(0, 3, 1, 2).contiguous())
-        return {"x_hat": x_hat, "likelihoods": {"y": y_likelihoods, "z": z_likelihoods}}
-
-    def update(self, scale_table=None, force=False):
-        if scale_table is None:
-            scale_table = get_scale_table()
-        updated = self.gaussian_conditional.update_scale_table(scale_table, force=force)
-        updated |= super().update(force=force)
-        return updated
-
-    def load_state_dict(self, state_dict):
-        update_registered_buffers(
-            self.gaussian_conditional,
-            "gaussian_conditional",
-            ["_quantized_cdf", "_offset", "_cdf_length", "scale_table"],
-            state_dict,
-        )
-        super().load_state_dict(state_dict)
-
-    @classmethod
-    def from_state_dict(cls, state_dict):
-        """Return a new model instance from `state_dict`."""
-        net = cls()
-        net.load_state_dict(state_dict)
-        return net
-
-    def compress(self, x):
-        x = self.patch_embed(x)
-
-        Wh, Ww = x.size(2), x.size(3)
-        x = x.flatten(2).transpose(1, 2)
-        for i in range(self.num_layers):
-            layer = self.ana_layers[i]
-            x, Wh, Ww = layer(x, Wh, Ww)
-        y = x
-        C = self.embed_dim * 8
-        y = y.view(-1, Wh, Ww, C).permute(0, 3, 1, 2).contiguous()
-        y_shape = y.shape[2:]
-
-        z = self.h_a(y)
-        z_strings = self.entropy_bottleneck.compress(z)
-        z_hat = self.entropy_bottleneck.decompress(z_strings, z.size()[-2:])
-
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-        y_slices = y.chunk(self.num_slices, 1)
-        y_hat_slices = []
-
-        cdf = self.gaussian_conditional.quantized_cdf.tolist()
-        cdf_lengths = self.gaussian_conditional.cdf_length.reshape(-1).int().tolist()
-        offsets = self.gaussian_conditional.offset.reshape(-1).int().tolist()
-
-        encoder = BufferedRansEncoder()
-        symbols_list = []
-        indexes_list = []
-        y_strings = []
-
-        for slice_index, y_slice in enumerate(y_slices):
-            support_slices = y_hat_slices if self.max_support_slices < 0 else y_hat_slices[: self.max_support_slices]
-
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, : y_shape[0], : y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, : y_shape[0], : y_shape[1]]
-
-            index = self.gaussian_conditional.build_indexes(scale)
-            y_q_slice = self.gaussian_conditional.quantize(y_slice, "symbols", mu)
-            y_hat_slice = y_q_slice + mu
-
-            symbols_list.extend(y_q_slice.reshape(-1).tolist())
-            indexes_list.extend(index.reshape(-1).tolist())
-
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-        encoder.encode_with_indexes(symbols_list, indexes_list, cdf, cdf_lengths, offsets)
-
-        y_string = encoder.flush()
-        y_strings.append(y_string)
-
-        return {"strings": [y_strings, z_strings], "shape": z.size()[-2:]}
-
-    def decompress(self, strings, shape):
-        assert isinstance(strings, list) and len(strings) == 2
-        z_hat = self.entropy_bottleneck.decompress(strings[1], shape)
-        latent_scales = self.h_scale_s(z_hat)
-        latent_means = self.h_mean_s(z_hat)
-
-        y_shape = [z_hat.shape[2] * 4, z_hat.shape[3] * 4]
-        Wh, Ww = y_shape
-        C = self.embed_dim * 8
-
-        y_string = strings[0][0]
-
-        y_hat_slices = []
-        cdf = self.gaussian_conditional.quantized_cdf.tolist()
-        cdf_lengths = self.gaussian_conditional.cdf_length.reshape(-1).int().tolist()
-        offsets = self.gaussian_conditional.offset.reshape(-1).int().tolist()
-
-        decoder = RansDecoder()
-        decoder.set_stream(y_string)
-
-        for slice_index in range(self.num_slices):
-            support_slices = y_hat_slices if self.max_support_slices < 0 else y_hat_slices[: self.max_support_slices]
-            mean_support = torch.cat([latent_means] + support_slices, dim=1)
-            mu = self.cc_mean_transforms[slice_index](mean_support)
-            mu = mu[:, :, : y_shape[0], : y_shape[1]]
-
-            scale_support = torch.cat([latent_scales] + support_slices, dim=1)
-            scale = self.cc_scale_transforms[slice_index](scale_support)
-            scale = scale[:, :, : y_shape[0], : y_shape[1]]
-
-            index = self.gaussian_conditional.build_indexes(scale)
-
-            rv = decoder.decode_stream(index.reshape(-1).tolist(), cdf, cdf_lengths, offsets)
-            rv = torch.Tensor(rv).reshape(1, -1, y_shape[0], y_shape[1])
-            y_hat_slice = self.gaussian_conditional.dequantize(rv, mu)
-
-            lrp_support = torch.cat([mean_support, y_hat_slice], dim=1)
-            lrp = self.lrp_transforms[slice_index](lrp_support)
-            lrp = 0.5 * torch.tanh(lrp)
-            y_hat_slice += lrp
-
-            y_hat_slices.append(y_hat_slice)
-
-        y_hat = torch.cat(y_hat_slices, dim=1)
-        y_hat = y_hat.permute(0, 2, 3, 1).contiguous().view(-1, Wh * Ww, C)
-        for i in range(self.num_layers):
-            layer = self.syn_layers[i]
-            y_hat, Wh, Ww = layer(y_hat, Wh, Ww)
-
-        x_hat = self.end_conv(y_hat.view(-1, Wh, Ww, self.embed_dim).permute(0, 3, 1, 2).contiguous()).clamp_(0, 1)
-        return {"x_hat": x_hat}

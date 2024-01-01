@@ -53,7 +53,7 @@ class Trainer:
                 break
         if self.rank == 0:
             self.logger_train.info(args)
-            # self.logger_train.info(self.net)
+            self.logger_train.info(f"params:{self.net.count_parameters()}, {self.net.count_parameters()/10**6:.2f}M")
         self.train_dataloader, self.val_dataloader = self.init_dataset(
             args.dataset, args.val_dataset, args.batch_size, args.test_batch_size, args.num_workers, args.channel
         )

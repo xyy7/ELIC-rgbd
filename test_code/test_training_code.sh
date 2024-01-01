@@ -34,6 +34,11 @@ cd ../playground
 # python train.py --save --gpu_id 6 -q 2 -e 2 -m STF --channel 1 --dataset "/data/xyy/nyu5k" --val_dataset "/data/xyy/nyu5k/val" --debug
 
 
+## test STF united
+python train.py --save --gpu_id 6 -q 2_2 -e 2 -m STF_united --channel 4 --dataset /data/xyy/sunrgbd/train/train --val_dataset /data/xyy/sunrgbd/train/val --debug
+python train.py --save --gpu_id 6 -q 2_2 -e 2 -m STF_united --channel 4 --dataset "/data/xyy/nyu5k" --val_dataset "/data/xyy/nyu5k/val" --debug
+
+
 ## 
 ## test MLIC
 # python train.py --save --gpu_id 6 -q 2 -e 2 -m MLIC --channel 3 --dataset /data/xyy/sunrgbd/train/train --val_dataset /data/xyy/sunrgbd/train/val --debug
@@ -46,5 +51,5 @@ cd ../playground
 
 
 ## train concat
-python train.py --save --gpu_id 6 -q 2 -e 2 -m ELIC_cat --channel 4 --dataset /data/xyy/sunrgbd/train/train --val_dataset /data/xyy/sunrgbd/train/val --debug
-python train.py --save --gpu_id 6 -q 2 -e 2 -m ELIC_cat --channel 4 --dataset "/data/xyy/nyu5k" --val_dataset "/data/xyy/nyu5k/val" --debug
+# python train.py --save --gpu_id 6 -q 2 -e 2 -m ELIC_cat --channel 4 --dataset /data/xyy/sunrgbd/train/train --val_dataset /data/xyy/sunrgbd/train/val --debug
+# python train.py --save --gpu_id 6 -q 2 -e 2 -m ELIC_cat --channel 4 --dataset "/data/xyy/nyu5k" --val_dataset "/data/xyy/nyu5k/val" --debug
