@@ -18,6 +18,7 @@ class BaseDataset(Dataset):
         self.channel = channel
         if channel > 1:
             rgb_dir = train_dir + "/color/*"
+            print("rgb_dir", rgb_dir)
             self.rgb_files = sorted(glob.glob(rgb_dir))
             if debug:
                 self.rgb_files = self.rgb_files[:100]
@@ -26,8 +27,9 @@ class BaseDataset(Dataset):
 
         if channel == 1 or channel == 4:
             depth_dir = train_dir + "/gt/*"
+            print("depth_dir", depth_dir)
             self.depth_files = sorted(glob.glob(depth_dir))
-            self.depth_max = 255
+            # self.depth_max = 255
             if debug:
                 self.depth_files = self.depth_files[:100]
             self.len = len(self.depth_files)
@@ -40,7 +42,8 @@ class BaseDataset(Dataset):
 
         depth_path = self.depth_files[index]
         depth = Image.open(depth_path).convert("L")
-        depth = np.array(depth) / self.depth_max
+        depth_max = 255.0 if np.array(depth).max() < 255 else self.depth_max
+        depth = np.array(depth) / depth_max
 
         rgb = torch.from_numpy(img)  # [3,H,W]
         depth = torch.from_numpy(depth)  # [H,W]
@@ -95,7 +98,8 @@ class BaseDataset(Dataset):
     def __getitemForChannel1__(self, index):
         depth_path = self.depth_files[index]
         depth = Image.open(depth_path).convert("L")
-        depth = np.array(depth) / self.depth_max
+        depth_max = 255 if np.array(depth).max() < 255 else self.depth_max
+        depth = np.array(depth) / depth_max
 
         depth = torch.from_numpy(depth)  # [H,W]
         depth = torch.unsqueeze(depth, 0)
@@ -132,10 +136,10 @@ class BaseDataset(Dataset):
 class nyuv2(BaseDataset):
     def __init__(self, train_dir, is_train, channel=4, debug=False):
         super().__init__(train_dir, is_train, channel, debug)
-        self.depth_max = 255
+        self.depth_max = 10000.0
 
 
 class sun(BaseDataset):
     def __init__(self, train_dir, is_train, channel=4, debug=False):
         super().__init__(train_dir, is_train, channel, debug)
-        self.depth_max = 100000
+        self.depth_max = 100000.0

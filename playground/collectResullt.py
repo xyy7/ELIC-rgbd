@@ -5,8 +5,8 @@ import re
 # mode可以是模态名称，也可以是模型名称
 def collect_test_dirs(root, mode):
     dirs = os.listdir(root)
-    dirs = [d for d in dirs if d.find(mode) != -1]
-    # dirs = [d for d in dirs if d.find(mode) != -1 and len(re.findall(r"(2_3|3_4|4_5|5_6)", d)) != 0]
+    # dirs = [d for d in dirs if d.find(mode) != -1]
+    dirs = [d for d in dirs if d.find(mode) != -1 and len(re.findall(r"(2_2.5|3_3.5|4_4.5|5_5.5)", d)) != 0]
     dirs.sort()
     return dirs
 

@@ -12,6 +12,7 @@ from PIL import Image, ImageFile
 from testing.tester_master import TesterMaster
 from testing.tester_single import TesterSingle
 from testing.tester_united import TesterUnited
+from testing.tester_concat import TesterConcat
 
 faulthandler.enable()
 
@@ -25,8 +26,12 @@ def main(argv):
     config = model_config()
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     if args.channel == 4:
-        print("TesterUnited")
-        tester = TesterUnited(args, config)
+        if args.model.find("cat") != -1:
+            print("TesterConcat")
+            tester = TesterConcat(args, config)
+        else:
+            print("TesterUnited")
+            tester = TesterUnited(args, config)
     else:
         if args.model.find("master") != -1:
             print("TesterMaster")

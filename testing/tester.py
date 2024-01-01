@@ -90,7 +90,7 @@ class Tester:
     def init_logger(self, exp_dir_path, exp_name, epoch):
         log_level = logging.DEBUG if self.debug else logging.INFO
         print(f"test_epoch{epoch}" + exp_name)
-        setup_logger("test", exp_dir_path, f"test_epoch{epoch}" + exp_name, level=log_level)
+        setup_logger("test", exp_dir_path, f"test_epoch{epoch}_" + exp_name, level=log_level)
         logger_test = logging.getLogger("test")
         logger_test.info(f"Start testing!")
         return logger_test

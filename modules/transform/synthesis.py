@@ -2,11 +2,31 @@ import torch
 import torch.nn as nn
 from compressai.layers import AttentionBlock, subpel_conv3x3
 from modules.layers.conv import conv, conv1x1, conv3x3, deconv
-from modules.layers.res_blk import ResidualBottleneck
+from modules.layers.res_blk import ResidualBlock, ResidualBlockUpsample, ResidualBottleneck
 
 from .attention import *
 from .maxvit import MaxViTBlock
 from .spatialAligner import Spatial_aligner
+
+
+class SynthesisTransform(nn.Module):
+    def __init__(self, N, M, channel=3):
+        super().__init__()
+        self.synthesis_transform = nn.Sequential(
+            ResidualBlock(M, N),
+            ResidualBlockUpsample(N, N, 2),
+            ResidualBlock(N, N),
+            ResidualBlockUpsample(N, N, 2),
+            ResidualBlock(N, N),
+            ResidualBlockUpsample(N, N, 2),
+            ResidualBlock(N, N),
+            subpel_conv3x3(N, channel, 2),
+        )
+
+    def forward(self, x):
+        x = self.synthesis_transform(x)
+
+        return x
 
 
 class SynthesisTransformEX(nn.Module):
@@ -225,6 +245,36 @@ class SynthesisTransformEXSingle(nn.Module):
 
 
 ###################### HyperSynthesisEX ######################
+
+
+class HyperSynthesis(nn.Module):
+    """
+    Local Reference
+    """
+
+    def __init__(self, M=192, N=192) -> None:
+        super().__init__()
+        self.M = M
+        self.N = N
+
+        self.increase = nn.Sequential(
+            conv3x3(N, M),
+            nn.GELU(),
+            subpel_conv3x3(M, M, 2),
+            nn.GELU(),
+            conv3x3(M, M * 3 // 2),
+            nn.GELU(),
+            subpel_conv3x3(M * 3 // 2, M * 3 // 2, 2),
+            nn.GELU(),
+            conv3x3(M * 3 // 2, M * 2),
+        )
+
+    def forward(self, x):
+        x = self.increase(x)
+
+        return x
+
+
 class HyperSynthesisEX(nn.Module):
     def __init__(self, N, M, act=nn.ReLU) -> None:
         super().__init__()

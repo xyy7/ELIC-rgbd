@@ -23,6 +23,7 @@ from config.config import model_config
 from training.trainer_master import TrainerMaster
 from training.trainer_single import TrainerSingle
 from training.trainer_united import TrainerUnited
+from training.trainer_concat import TrainerConcat
 
 
 def gitIt(exp_name):
@@ -41,8 +42,12 @@ def main(argv):
         gitIt(args.experiment)
 
     if args.channel == 4:
-        print("TrainerUnited")
-        trainer = TrainerUnited(args, config)
+        if args.model.find("cat") != -1:
+            print("TrainerConcat")
+            trainer = TrainerConcat(args, config)
+        else:
+            print("TrainerUnited")
+            trainer = TrainerUnited(args, config)
     else:
         if args.model.find("master") != -1:
             print("TrainerMaster")
