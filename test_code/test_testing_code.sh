@@ -6,6 +6,7 @@ cd ../playground
 # python test.py --channel 4 -m ELIC_united_CPT --gpu_id 6 -q 2_2 --debug --dataset /data/xyy/nyu5k/nyuv2/test
 # python test.py --channel 4 -m ELIC_united_CPT --gpu_id 6 -q 2_2 --debug --dataset /data/xyy/sunrgbd/test
 
+
 # python test.py --channel 4 -m ELIC_united_CCE --gpu_id 6 -q 2_2 --debug --dataset /data/xyy/nyu5k/nyuv2/test
 # python test.py --channel 4 -m ELIC_united_CCE --gpu_id 6 -q 2_2 --debug --dataset /data/xyy/sunrgbd/test
 

@@ -10,6 +10,9 @@ def train_options(argv):
         "-vd", "--val_dataset", default="/data/xyy/nyu5k/val", type=str, required=False, help="Training dataset"
     )
     parser.add_argument("-e", "--epochs", default=400, type=int, help="Number of epochs (default: %(default)s)")
+    parser.add_argument(
+        "-wr", "--warmup_step", default=0, type=int, help="Number of warmup step (default: %(default)s)"
+    )
     parser.add_argument("--start_epoch", default=0, type=int, help="Number of restore epochs (default: %(default)s)")
     parser.add_argument("-ch", "--channel", default=3, type=int, help="Number of image channel (default: %(default)s)")
     parser.add_argument("-lr", "--learning-rate", default=1e-4, type=float, help="Learning rate (default: %(default)s)")

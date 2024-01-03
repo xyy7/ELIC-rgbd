@@ -40,13 +40,15 @@ class RateDistortionLossSingleModal(nn.Module):
 class RateDistortionLossUnited(nn.Module):
     """Custom rate distortion loss with a Lagrangian parameter."""
 
-    def __init__(self, quality: str, distortionLossForDepth="d_loss"):
+    def __init__(self, quality: str, distortionLossForDepth="d_loss", warmup_step=0):
         super().__init__()
         self.mse = nn.MSELoss()
         self.l1_criterion = nn.L1Loss()
         self.lmbdas = [0.00180, 0.00350, 0.00670, 0.01300, 0.02500, 0.04830, 0.09320, 0.1800]
         self.rgb_lmbda, self.depth_lmbda = self.get_lmbda_from_fraction_q(quality=quality)
         self.distortionLossForDepth = distortionLossForDepth
+        self.cur_step = 0
+        self.warmup_step = warmup_step
 
     def get_lmbda_from_fraction_q(self, quality):
         rgb_q, depth_q = quality.split("_")
@@ -98,13 +100,8 @@ class RateDistortionLossUnited(nn.Module):
         loss["edge_loss"] = torch.mean(grad_diff_x + grad_diff_y)
         loss["ssim_loss"] = torch.clamp((1 - ms_ssim(d, depth, data_range=1)) * 0.5, 0, 1)
 
-        #  depth_loss': tensor(0.3145, device='cuda:0'),
-        # 'edge_loss': tensor(0.0150, device='cuda:0'),
-        # 'l1_loss': tensor(0.0056, device='cuda:0'),
-        # 'ssim_loss': tensor(0.0012, device='cuda:0')
-
-        # loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"] + 0.1 * loss["l1_loss"]
-        loss["d_loss"] = loss["ssim_loss"] + 0.1 * loss["l1_loss"]
+        loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"] + 0.1 * loss["l1_loss"]
+        # loss["d_loss"] = loss["ssim_loss"] + 0.1 * loss["l1_loss"]
         # loss["d_loss"] = loss["edge_loss"] + 0.1 * loss["l1_loss"]
         # loss["d_loss"] = loss["ssim_loss"] + loss["edge_loss"]
         return loss
@@ -115,14 +112,19 @@ class RateDistortionLossUnited(nn.Module):
         loss = {}
         loss["d_bpp_loss"] = self.get_bpp(num_pixels, output["d_likelihoods"])
         d = output["x_hat"]["d"]
-        loss["d_mse_loss"] = self.mse(d, depth)
-        loss["depth_loss"] = self.depth_lmbda * 255**2 * loss["d_mse_loss"] + loss["d_bpp_loss"]
-        if self.distortionLossForDepth == "d_loss":
+
+        if self.distortionLossForDepth == "d_loss" and self.cur_step < self.warmup_step:
             loss.update(self.get_d_loss(d, depth))
             loss["depth_loss"] = self.depth_lmbda * 255**2 * 0.01 * loss["d_loss"] + loss["d_bpp_loss"]
+            loss["d_mse_loss"] = loss["d_loss"]
+        else:
+            loss["d_mse_loss"] = self.mse(d, depth)
+            loss["d_loss"] = loss["d_mse_loss"]
+            loss["depth_loss"] = self.depth_lmbda * 255**2 * loss["d_mse_loss"] + loss["d_bpp_loss"]
         return loss
 
     def forward(self, output, rgb, depth):
+        self.cur_step += 1
         loss = {}
         loss.update(self.get_rgb_loss(output, rgb))
         loss.update(self.get_depth_loss(output, depth))

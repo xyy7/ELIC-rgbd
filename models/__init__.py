@@ -8,6 +8,8 @@ from .elic_united_R2D import ELIC_united_R2D
 from .mlicpp import MLICPlusPlus
 from .stf import SymmetricalTransFormer
 from .stf_united import SymmetricalTransFormerUnited
+from .stf_united_CPT import SymmetricalTransFormerUnited_CPT
+from .stf_united_EEM import SymmetricalTransFormerUnited_EEM
 
 # 先找复杂的
 modelZoo = {
@@ -18,6 +20,8 @@ modelZoo = {
     "ELIC_united": ELIC_united,
     "ELIC_master": ELIC_master,
     "ELIC": ELIC,
+    "STF_united_CPT": SymmetricalTransFormerUnited_CPT,
+    "STF_united_EEM": SymmetricalTransFormerUnited_EEM,
     "STF_united": SymmetricalTransFormerUnited,
     "STF": SymmetricalTransFormer,
     "MLIC": MLICPlusPlus,

@@ -5,8 +5,8 @@ import re
 # mode可以是模态名称，也可以是模型名称
 def collect_test_dirs(root, mode):
     dirs = os.listdir(root)
-    # dirs = [d for d in dirs if d.find(mode) != -1]
-    dirs = [d for d in dirs if d.find(mode) != -1 and len(re.findall(r"(2_2.5|3_3.5|4_4.5|5_5.5)", d)) != 0]
+    dirs = [d for d in dirs if d.find(mode) != -1]
+    # dirs = [d for d in dirs if d.find(mode) != -1 and len(re.findall(r"(2_2.5|3_3.5|4_4.5|5_5.5)", d)) != 0]
     dirs.sort()
     return dirs
 
@@ -174,9 +174,9 @@ def print_united_result_for_draw(result, mode="r"):
 
 if __name__ == "__main__":
     root = "../experiments"
-    model_name1 = "ELIC_united_wo_edge"
+    model_name1 = "STF_united"
     model_name2 = "nyuv2_depth_ELIC_master-60"
-    if model_name1.find("united") != -1:
+    if model_name1.find("united") != -1 or model_name1.find("cat") != -1:
         dirs = collect_test_dirs(root, model_name1)
         print("test_dir:", dirs)
         rgb_metrics, depth_metrics = get_metrics_from_collected_united_dirs(root, dirs)

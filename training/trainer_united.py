@@ -17,7 +17,7 @@ class TrainerUnited(Trainer):
     def __init__(self, args, model_config) -> None:
         super().__init__(args, model_config)
         self.criterion = RateDistortionLossUnited(
-            quality=args.quality, distortionLossForDepth=args.distortionLossForDepth
+            quality=args.quality, distortionLossForDepth=args.distortionLossForDepth, warmup_step=args.warmup_step
         )
 
     def train_backward_and_log(self, out_criterion, clip_max_norm, i, epoch, current_step):

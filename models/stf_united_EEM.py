@@ -467,11 +467,11 @@ class AnalysisTransformSTFunited(nn.Module):
             dim *= 2
             self.rgb_ana_layers.append(layer)
             self.depth_ana_layers.append(copy.deepcopy(layer))
-            if i_layer < self.num_layers - 1:
-                self.rgb_ana_layers.append(bi_spf(dim))
-                self.rgb_ana_layers.append(conv(2 * dim, dim, stride=1))
-                self.depth_ana_layers.append(nn.Identity())
-                self.depth_ana_layers.append(conv(2 * dim, dim, stride=1))
+            # if i_layer < self.num_layers - 1:
+            #     self.rgb_ana_layers.append(bi_spf(dim))
+            #     self.rgb_ana_layers.append(conv1x1(2 * dim, dim))
+            #     self.depth_ana_layers.append(nn.Identity())
+            #     self.depth_ana_layers.append(conv1x1(2 * dim, dim))
 
     def forward(self, rgb, depth):
         rgb = self.rgb_patch_embed(rgb)
@@ -487,20 +487,20 @@ class AnalysisTransformSTFunited(nn.Module):
         depth_y = depth
 
         for num, (rgb_bk, depth_bk) in enumerate(zip(self.rgb_ana_layers, self.depth_ana_layers)):
-            if isinstance(rgb_bk, bi_spf):
-                rgb_y = rgb_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
-                depth_y = depth_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+            # if isinstance(rgb_bk, bi_spf):
+            #     rgb_y = rgb_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+            #     depth_y = depth_y.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
 
-                depth_y = depth_bk(depth_y)
-                rgb_f, depth_f = rgb_bk(rgb_y, depth_y)
-                rgb_y = torch.cat((rgb_y, rgb_f), dim=-3)
-                depth_y = torch.cat((depth_y, depth_f), dim=-3)
-            elif isinstance(rgb_bk, nn.Conv2d):
-                rgb_y = rgb_bk(rgb_y)
-                depth_y = depth_bk(depth_y)
-                rgb_y = rgb_y.flatten(2).transpose(1, 2)
-                depth_y = depth_y.flatten(2).transpose(1, 2)
-            else:
+            #     depth_y = depth_bk(depth_y)
+            #     rgb_f, depth_f = rgb_bk(rgb_y, depth_y)
+            #     rgb_y = torch.cat((rgb_y, rgb_f), dim=-3)
+            #     depth_y = torch.cat((depth_y, depth_f), dim=-3)
+            # elif isinstance(rgb_bk, nn.Conv2d):
+            #     rgb_y = rgb_bk(rgb_y)
+            #     depth_y = depth_bk(depth_y)
+            #     rgb_y = rgb_y.flatten(2).transpose(1, 2)
+            #     depth_y = depth_y.flatten(2).transpose(1, 2)
+            # else:
                 rgb_y, _, _ = rgb_bk(rgb_y, Wh, Ww)
                 depth_y, Wh, Ww = depth_bk(depth_y, Wh, Ww)
 
@@ -563,11 +563,11 @@ class SynthesisTransformSTFunited(nn.Module):
             dim = dim // 2
             self.rgb_syn_layers.append(layer)
             self.depth_syn_layers.append(copy.deepcopy(layer))
-            if i_layer < self.num_layers - 1:
-                self.rgb_syn_layers.append(bi_spf(dim))
-                self.rgb_syn_layers.append(conv(2 * dim, dim, stride=1))
-                self.depth_syn_layers.append(nn.Identity())
-                self.depth_syn_layers.append(conv(2 * dim, dim, stride=1))
+            # if i_layer < self.num_layers - 1:
+            #     self.rgb_syn_layers.append(bi_spf(dim))
+            #     self.rgb_syn_layers.append(conv1x1(2 * dim, dim))
+            #     self.depth_syn_layers.append(nn.Identity())
+            #     self.depth_syn_layers.append(conv1x1(2 * dim, dim))
 
         self.rgb_end_conv = nn.Sequential(
             nn.Conv2d(embed_dim, embed_dim * patch_size**2, kernel_size=5, stride=1, padding=2),
@@ -588,19 +588,19 @@ class SynthesisTransformSTFunited(nn.Module):
         depth_hat = depth_hat.permute(0, 2, 3, 1).contiguous().view(-1, Wh * Ww, C)
 
         for num, (rgb_bk, depth_bk) in enumerate(zip(self.rgb_syn_layers, self.depth_syn_layers)):
-            if isinstance(rgb_bk, bi_spf):
-                rgb_hat = rgb_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
-                depth_hat = depth_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
-                depth_hat = depth_bk(depth_hat)
-                rgb_f, depth_f = rgb_bk(rgb_hat, depth_hat)
-                rgb_hat = torch.cat((rgb_hat, rgb_f), dim=-3)
-                depth_hat = torch.cat((depth_hat, depth_f), dim=-3)
-            elif isinstance(rgb_bk, nn.Conv2d):
-                rgb_hat = rgb_bk(rgb_hat)
-                depth_hat = depth_bk(depth_hat)
-                rgb_hat = rgb_hat.flatten(2).transpose(1, 2)
-                depth_hat = depth_hat.flatten(2).transpose(1, 2)
-            else:
+            # if isinstance(rgb_bk, bi_spf):
+            #     rgb_hat = rgb_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+            #     depth_hat = depth_hat.view(B, Wh, Ww, -1).permute(0, 3, 1, 2).contiguous()
+            #     depth_hat = depth_bk(depth_hat)
+            #     rgb_f, depth_f = rgb_bk(rgb_hat, depth_hat)
+            #     rgb_hat = torch.cat((rgb_hat, rgb_f), dim=-3)
+            #     depth_hat = torch.cat((depth_hat, depth_f), dim=-3)
+            # elif isinstance(rgb_bk, nn.Conv2d):
+            #     rgb_hat = rgb_bk(rgb_hat)
+            #     depth_hat = depth_bk(depth_hat)
+            #     rgb_hat = rgb_hat.flatten(2).transpose(1, 2)
+            #     depth_hat = depth_hat.flatten(2).transpose(1, 2)
+            # else:
                 rgb_hat, _, _ = rgb_bk(rgb_hat, Wh, Ww)
                 depth_hat, Wh, Ww = depth_bk(depth_hat, Wh, Ww)
 
@@ -610,7 +610,7 @@ class SynthesisTransformSTFunited(nn.Module):
         return rgb_hat, depth_hat
 
 
-class SymmetricalTransFormerUnited(ELIC_united):
+class SymmetricalTransFormerUnited_EEM(ELIC_united):
     def __init__(
         self,
         pretrain_img_size=256,
