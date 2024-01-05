@@ -174,7 +174,7 @@ def print_united_result_for_draw(result, mode="r"):
 
 if __name__ == "__main__":
     root = "../experiments"
-    model_name1 = "STF_united"
+    model_name1 = "STF_united_EEM"
     model_name2 = "nyuv2_depth_ELIC_master-60"
     if model_name1.find("united") != -1 or model_name1.find("cat") != -1:
         dirs = collect_test_dirs(root, model_name1)
