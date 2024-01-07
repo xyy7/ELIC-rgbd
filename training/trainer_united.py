@@ -4,6 +4,7 @@ import sys
 sys.path.append("..")  # cd xx/playground
 
 import os
+from pprint import pprint
 
 import torch
 from utils.IOutils import saveImg
@@ -22,6 +23,18 @@ class TrainerUnited(Trainer):
 
     def train_backward_and_log(self, out_criterion, clip_max_norm, i, epoch, current_step):
         out_criterion["loss"].backward()
+        if self.debug:
+            grads = {}
+            data = {}
+            for name, param in self.net.named_parameters():
+                if param.requires_grad and param.grad is not None:
+                    grads[name] = param.grad.mean()
+                    data[name] = param.data.mean()
+                    print("grad.mean,data.mean", name)
+                    print(grads[name])
+                    print(data[name], param.max())
+            print(self.net)
+
         if clip_max_norm > 0:
             torch.nn.utils.clip_grad_norm_(self.net.parameters(), clip_max_norm)
         self.optimizer.step()

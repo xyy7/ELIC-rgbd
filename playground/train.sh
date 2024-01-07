@@ -31,15 +31,30 @@
 # python train.py --save --gpu_id 7 -q 5 -e 400 -lr 1e-4   -m ELIC_cat --channel 4 --batch-size 24&
 
 ## STF_united
-# python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united --channel 4 --batch-size 16 --start_epoch 340 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_2_2/checkpoints/checkpoint_epoch399.pth.tar &
-# python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united --channel 4 --batch-size 16 --start_epoch 340 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_3_3/checkpoints/checkpoint_epoch399.pth.tar &
-# python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united --channel 4 --batch-size 16 --start_epoch 340 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_4_4/checkpoints/checkpoint_epoch399.pth.tar &
-# python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united --channel 4 --batch-size 16 --start_epoch 340 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_5_5/checkpoints/checkpoint_epoch399.pth.tar &
+# python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16 --start_epoch 250 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_2_2/checkpoints/checkpoint_epoch399.pth.tar &
+# python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16 --start_epoch 250 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_3_3/checkpoints/checkpoint_epoch399.pth.tar &
+# python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16 --start_epoch 250 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_4_4/checkpoints/checkpoint_epoch399.pth.tar &
+# python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16 --start_epoch 250 -c /home/xyy/ELIC/experiments/nyuv2_STF_united_5_5/checkpoints/checkpoint_epoch399.pth.tar &
 
-python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
-python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
-python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
-python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
+# python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  &
+# python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  &
+# python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  &
+# python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  &
+
+python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_add --channel 4 --batch-size 16  &
+python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_add --channel 4 --batch-size 16  &
+python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united_add --channel 4 --batch-size 16  &
+python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united_add --channel 4 --batch-size 16  &
+
+# python train.py --save --gpu_id 4 -q 2_1 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  -c /home/xyy/ELIC/experiments/nyuv2_STF_united_no_droppath_2_1.5/checkpoints/*best*.pth.tar &
+# python train.py --save --gpu_id 5 -q 3_2 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  -c /home/xyy/ELIC/experiments/nyuv2_STF_united_no_droppath_3_2.5/checkpoints/*best*.pth.tar &
+# python train.py --save --gpu_id 6 -q 4_3 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  -c /home/xyy/ELIC/experiments/nyuv2_STF_united_no_droppath_4_3.5/checkpoints/*best*.pth.tar & 
+# python train.py --save --gpu_id 7 -q 5_4 -e 400 -lr 1e-4  -m STF_united_no_droppath --channel 4 --batch-size 16  -c /home/xyy/ELIC/experiments/nyuv2_STF_united_no_droppath_5_4.5/checkpoints/*best*.pth.tar &
+
+# python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
+# python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
+# python train.py --save --gpu_id 6 -q 4_3.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
+# python train.py --save --gpu_id 7 -q 5_4.5 -e 400 -lr 1e-4  -m STF_united_EEM --channel 4 --batch-size 16 &
 
 # python train.py --save --gpu_id 4 -q 2_1.5 -e 400 -lr 1e-4  -m STF_united_CPT_MSE --channel 4 --batch-size 16 --distortionLossForDepth mse&
 # python train.py --save --gpu_id 5 -q 3_2.5 -e 400 -lr 1e-4  -m STF_united_CPT_MSE --channel 4 --batch-size 16 --distortionLossForDepth mse&
